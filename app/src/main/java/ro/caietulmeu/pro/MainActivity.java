@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.speech.RecognizerIntent;
 import android.text.*;
+import android.view.inputmethod.BaseInputConnection;
 import android.text.style.*;
 import android.view.*;
 import android.widget.*;
@@ -36,7 +37,8 @@ public class MainActivity extends Activity {
  LinearLayout line(LinearLayout parent){LinearLayout l=new LinearLayout(this);l.setOrientation(0);HorizontalScrollView sc=new HorizontalScrollView(this);sc.addView(l);parent.addView(sc);return l;}
  EditText field(String hint,boolean multiline){
   EditText e=new EditText(this);e.setHint(hint);e.setTextColor(fg());e.setHintTextColor(0xff888899);e.setTextSize(19);e.setPadding(15,14,15,14);e.setBackgroundColor(panel());
-  if(multiline){e.setGravity(48);e.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);}else e.setSingleLine(true);
+  if(multiline){e.setGravity(48);e.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES|android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);}else e.setSingleLine(true);
+  e.setPrivateImeOptions("nm");
   return e;
  }
  void persist(){getPreferences(0).edit().putString("notes",notes.toString()).putBoolean("dark",dark).apply();}
@@ -81,7 +83,7 @@ public class MainActivity extends Activity {
   before=body.getText().toString();
   body.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){}public void afterTextChanged(Editable e){if(!loading&&!before.equals(e.toString())){undo.push(before);if(undo.size()>50)undo.remove(0);before=e.toString();redo.clear();status.setText("Modificări în curs…");}}});
  }
- void replace(String s){loading=true;body.setText(s);body.setSelection(s.length());before=s;loading=false;}
+ void replace(String s){loading=true;body.setText(s);BaseInputConnection.removeComposingSpans(body.getText());body.setSelection(s.length());before=s;loading=false;}
  void save(){if(body==null||title==null)return;try{JSONObject o=new JSONObject();o.put("title",title.getText().toString().trim().isEmpty()?"Fără titlu":title.getText().toString());o.put("body",body.getText().toString());o.put("time",System.currentTimeMillis());if(current<0){notes.put(o);current=notes.length()-1;}else notes.put(current,o);persist();status.setText("✓ Salvat pe telefon");}catch(Exception e){Toast.makeText(this,"Eroare la salvare",Toast.LENGTH_SHORT).show();}}
  void voice(){Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Dictează în română");try{startActivityForResult(i,VOICE);}catch(Exception e){Toast.makeText(this,"Activează recunoașterea vocală Google",Toast.LENGTH_LONG).show();}}
  @Override protected void onActivityResult(int req,int res,Intent data){
@@ -92,7 +94,7 @@ public class MainActivity extends Activity {
     String words=matches.get(0);int a=Math.max(0,body.getSelectionStart()),b=Math.max(0,body.getSelectionEnd());
     Editable e=body.getText();int start=Math.min(a,b),end=Math.max(a,b);
     String prefix=start>0&&!Character.isWhitespace(e.charAt(start-1))?" ":"";
-    e.replace(start,end,prefix+words);body.setSelection(start+prefix.length()+words.length());
+    e.replace(start,end,prefix+words);BaseInputConnection.removeComposingSpans(e);body.setSelection(start+prefix.length()+words.length());
    }
   }
  }
