@@ -12,7 +12,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - name: Verifică Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platforms"
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
