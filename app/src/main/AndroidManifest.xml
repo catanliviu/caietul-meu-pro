@@ -7,7 +7,7 @@
  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
  <queries><intent><action android:name="android.speech.action.RECOGNIZE_SPEECH"/></intent><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
- <application android:label="Nu Uita 2.12 - MESAJ" android:icon="@drawable/ic_brain" android:roundIcon="@drawable/ic_brain" android:theme="@style/Theme.NuUita" android:usesCleartextTraffic="false">
+ <application android:label="Nu Uita 2.13 - VOCAL COMPLET" android:icon="@drawable/ic_brain" android:roundIcon="@drawable/ic_brain" android:theme="@style/Theme.NuUita" android:usesCleartextTraffic="false">
   <activity android:name="ro.caietulmeu.pro.MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
   </activity>
