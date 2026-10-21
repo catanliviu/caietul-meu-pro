@@ -20,6 +20,21 @@ public final class ParserSmokeTest {
    throw new AssertionError(speech+" -> "+value.getTime()+" expected "+y+"-"+month+"-"+day+" "+h+":"+minute);
   tested++;
  }
+ static void message(String speech,String expected){
+  RomanianReminderParser.Result result=RomanianReminderParser.parse(speech,NOW.getTimeInMillis(),TZ);
+  if(!result.valid)throw new AssertionError(speech+" -> "+result.error);
+  if(!expected.equals(result.details))
+   throw new AssertionError("Mesaj greșit pentru «"+speech+"»: «"+result.details+"» (așteptat «"+expected+"»)");
+  if(!expected.isEmpty()&&!expected.equals(RomanianReminderParser.speechText(result.title,result.details)))
+   throw new AssertionError("Vocea ar repeta sau ar pierde mesajul: "+
+    RomanianReminderParser.speechText(result.title,result.details));
+  tested++;
+ }
+ static void spoken(String title,String details,String expected){
+  String found=RomanianReminderParser.speechText(title,details);
+  if(!expected.equals(found))throw new AssertionError("TTS pentru "+title+": «"+found+"», așteptat «"+expected+"»");
+  tested++;
+ }
  static void invalid(String speech){
   RomanianReminderParser.Result result=RomanianReminderParser.parse(speech,NOW.getTimeInMillis(),TZ);
   if(result.valid)throw new AssertionError("Trebuia să respingă: "+speech);
@@ -36,6 +51,15 @@ public final class ParserSmokeTest {
   check("Notificare pe 30.10.2026 la 12:46",2026,10,30,12,46);
   check("Memento peste două minute să beau apă",2026,10,21,19,57);
   check("La ora 15 36 pe 6 februarie anul viitor",2027,2,6,15,36);
+  message("Amintește-mi pe 30 octombrie la ora 12 și 46 să o sun pe Carmen","o sun pe Carmen");
+  message("Vreau să îmi faci un memento mâine la ora 11 să beau apă","beau apă");
+  message("Memento mâine la ora 11 să cumpăr pâine","cumpăr pâine");
+  message("Vreau un memento anul viitor în februarie în data de 6 la ora 15:36 cu detaliile respective","");
+  spoken("Memento","","");
+  spoken("Memento","Nu uita să bei apă","Nu uita să bei apă");
+  spoken("Nu uita să bei apă","Nu uita să bei apă","Nu uita să bei apă");
+  spoken("Sună medicul","La ora programată","Sună medicul. La ora programată");
+  spoken("Memento","să beau apă","să beau apă");
   invalid("Vreau un memento cu detaliile respective");
   invalid("Notificare la ora 12:46");
   invalid("Memento pe 30 octombrie");
