@@ -16,7 +16,7 @@ public final class ReminderKit {
  private ReminderKit() {}
  static final String STORE="caiet_mementouri_v1";
  static final String KEY="items";
- static final String CHANNEL="memento_alarm_v1";
+ static final String CHANNEL="memento_alarm_silent_v2";
  static final String ALARM="ro.caietulmeu.pro.MEMENTO_ALARM";
  static final String STOP="ro.caietulmeu.pro.MEMENTO_STOP";
  static final int NOTIFICATION_ID=1107;
@@ -26,22 +26,21 @@ public final class ReminderKit {
  static boolean recentlyDismissed(Context c,int id){
   if(id==0)return false;
   android.content.SharedPreferences p=c.getSharedPreferences(STORE,0);
-  return p.getInt("dismissed_id",-1)==id
-   && Math.abs(System.currentTimeMillis()-p.getLong("dismissed_at",0))<20000;
+  return Math.abs(System.currentTimeMillis()-p.getLong("dismissed_"+id,0))<30000;
  }
- static void silence(Context c,int id){
-  if(id!=0)c.getSharedPreferences(STORE,0).edit()
-   .putInt("dismissed_id",id).putLong("dismissed_at",System.currentTimeMillis()).commit();
+ static void silence(Context c,int requestedId){
   SoundService active=SoundService.active;
-  if(active!=null && (id==0||active.id==id)){
-   active.stopAudio();
-   active.stopForeground(true);
-   active.stopSelf();
-  }else if(active==null) {
-   c.stopService(new Intent(c,SoundService.class));
-  }
+  int playingId=active==null?0:active.id;
+  long now=System.currentTimeMillis();
+  android.content.SharedPreferences.Editor prefs=c.getSharedPreferences(STORE,0).edit();
+  if(requestedId>0)prefs.putLong("dismissed_"+requestedId,now);
+  if(playingId>0)prefs.putLong("dismissed_"+playingId,now);
+  prefs.commit(); // Nu reporni dintr-un START sosit imediat după oprire.
+  ReminderScreens.stopSharedPreview();
+  if(active!=null){active.stopAudio();active.stopForeground(true);active.stopSelf();}
+  c.stopService(new Intent(c,SoundService.class));
   NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
-  if(nm!=null && (active==null||id==0||active.id==id))nm.cancel(NOTIFICATION_ID);
+  if(nm!=null)nm.cancel(NOTIFICATION_ID);
  }
  public static class StopReceiver extends BroadcastReceiver {
   @Override public void onReceive(Context c,Intent i){
@@ -173,6 +172,7 @@ public final class ReminderKit {
    if(recentlyDismissed(this,id)){stopAudio();stopSelf();return START_NOT_STICKY;}
    String title=i.getStringExtra("title");if(title==null||title.isEmpty())title="Memento";
    String sound=i.getStringExtra("sound");
+   ReminderScreens.stopSharedPreview();
    NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
    NotificationChannel channel=new NotificationChannel(CHANNEL,"Alarme Memento",NotificationManager.IMPORTANCE_HIGH);
    channel.setDescription("Alarmă persistentă pentru programări");
@@ -204,7 +204,8 @@ public final class ReminderKit {
     android.util.Log.w("Memento","Fallback alarm sound",e);
     try{
      Uri u=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-     player=MediaPlayer.create(this,u);if(player!=null){player.setLooping(true);player.start();}
+     AudioAttributes backupAttr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
+     player=MediaPlayer.create(this,u,null,backupAttr,0);if(player!=null){player.setLooping(true);player.start();}
     }catch(Exception ignored){}
    }
    return START_STICKY;
