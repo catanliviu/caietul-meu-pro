@@ -164,11 +164,12 @@ final class ReminderScreens {
   content.addView(description);
   a.section(content,"🧠 Cum vrei să apară mementoul?");
   textOption=new CheckBox(a);
-  textOption.setText("☑ Mesaj scris pe ecran");
+  textOption.setText("Mesaj scris pe ecran");
   textOption.setChecked(showText);
   textOption.setTextSize(18);textOption.setTextColor(a.fg());
   textOption.setPadding(a.dp(12),a.dp(11),a.dp(10),a.dp(11));
   textOption.setBackground(a.glassSurface(false,true,false));
+  textOption.setElevation(a.dp(4));
   LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);
   cp.setMargins(a.dp(4),a.dp(5),a.dp(4),a.dp(5));content.addView(textOption,cp);
   voiceOption=new CheckBox(a);
@@ -177,6 +178,7 @@ final class ReminderScreens {
   voiceOption.setTextSize(18);voiceOption.setTextColor(a.fg());
   voiceOption.setPadding(a.dp(12),a.dp(11),a.dp(10),a.dp(11));
   voiceOption.setBackground(a.glassSurface(false,true,false));
+  voiceOption.setElevation(a.dp(4));
   LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-1,-2);
   vp.setMargins(a.dp(4),a.dp(5),a.dp(4),a.dp(5));content.addView(voiceOption,vp);
   textOption.setOnCheckedChangeListener((v,checked)->showText=checked);
