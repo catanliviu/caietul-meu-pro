@@ -129,8 +129,11 @@ final class ReminderScreens {
  void form(JSONObject existing,String initialTitle,String initialBody){
   stopPreview();enter();editing=existing;
   Calendar selected=Calendar.getInstance();
-  if(existing!=null){at=existing.optLong("at");sound=existing.optString("sound","");soundName=existing.optString("soundName","Sunetul implicit");repeat=existing.optString("repeat","O singură dată");}
-  else{selected.add(Calendar.HOUR_OF_DAY,1);selected.set(Calendar.MINUTE,0);selected.set(Calendar.SECOND,0);at=selected.getTimeInMillis();sound="";soundName="Sunetul implicit al telefonului";repeat="O singură dată";}
+  if(existing!=null){at=existing.optLong("at");repeat=existing.optString("repeat","O singură dată");}
+  else{selected.add(Calendar.HOUR_OF_DAY,1);selected.set(Calendar.MINUTE,0);selected.set(Calendar.SECOND,0);at=selected.getTimeInMillis();repeat="O singură dată";}
+  // Globalul suprascrie melodia fiecărui memento, inclusiv cele vechi.
+  sound=ReminderKit.globalSound(a,existing==null?"":existing.optString("sound",""));
+  soundName=ReminderKit.globalSoundName(a,existing==null?"Sunetul implicit al telefonului":existing.optString("soundName","Sunetul implicit al telefonului"));
   LinearLayout nav=a.line(a.root);
   a.button("‹ Înapoi",nav,()->list());
   navigation(existing==null?"🔔 Memento nou":"🔔 Editează memento");
@@ -177,7 +180,8 @@ final class ReminderScreens {
  void refresh(){
   if(dateLabel==null||timeLabel==null)return;
   dateLabel.setText("📅 Data: "+date(at));timeLabel.setText("🕒 Ora: "+time(at));
-  repeatLabel.setText("🔁 Repetare: "+repeat);soundLabel.setText("🎵 Sunet: "+soundName);
+  repeatLabel.setText("🔁 Repetare: "+repeat);
+  soundLabel.setText("🎵 Melodie permanentă, pentru TOATE alarmele: "+soundName);
  }
  void datePicker(){
   Calendar c=Calendar.getInstance();c.setTimeInMillis(at);
@@ -211,7 +215,10 @@ final class ReminderScreens {
    }
   }catch(Exception e){Toast.makeText(a,"Nu pot citi lista de alarme.",Toast.LENGTH_LONG).show();}
   new AlertDialog.Builder(a).setTitle("Alege un sunet de alarmă").setItems(names.toArray(new String[0]),(d,i)->{
-   sound=uris.get(i);soundName=names.get(i);refresh();testSound();
+   sound=uris.get(i);soundName=names.get(i);
+   ReminderKit.rememberGlobalSound(a,sound,soundName);
+   refresh();testSound();
+   Toast.makeText(a,"✓ Melodia este memorată pentru toate mementourile",Toast.LENGTH_LONG).show();
   }).setNegativeButton("Renunță",null).show();
  }
  void pickAudio(){
@@ -227,7 +234,9 @@ final class ReminderScreens {
   try(Cursor c=a.getContentResolver().query(u,null,null,null,null)){
    if(c!=null&&c.moveToFirst()){int i=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);if(i>=0)soundName=c.getString(i);}
   }catch(Exception ignored){}
+  ReminderKit.rememberGlobalSound(a,sound,soundName);
   refresh();testSound();
+  Toast.makeText(a,"✓ Melodia aleasă rămâne activă până o schimbi",Toast.LENGTH_LONG).show();
  }
  void testSound(){
   stopPreview();
