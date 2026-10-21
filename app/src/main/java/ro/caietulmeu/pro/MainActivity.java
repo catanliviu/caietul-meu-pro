@@ -30,6 +30,15 @@ public class MainActivity extends Activity {
  int bg(){return dark?0xff151b29:0xfff2f5ff;}
  int fg(){return dark?Color.WHITE:0xff182238;}
  int panel(){return dark?0xff283247:Color.WHITE;}
+ // FONT GLOBAL: același pentru notițele vechi, noi și după repornire.
+ float fontSizeSp(){return Math.max(12f,Math.min(40f,getPreferences(0).getFloat("global_font_sp",19f)));}
+ void changeFontSize(int delta){
+  float newSize=Math.max(12f,Math.min(40f,fontSizeSp()+delta));
+  boolean saved=getPreferences(0).edit().putFloat("global_font_sp",newSize).commit();
+  if(body!=null)body.setTextSize(newSize);
+  if(title!=null)title.setTextSize(newSize);
+  Toast.makeText(this,(saved?"✓ Font permanent: ":"Eroare la salvarea fontului: ")+(int)newSize+" sp",Toast.LENGTH_SHORT).show();
+ }
  @Override public void onCreate(Bundle b){super.onCreate(b);dark=getPreferences(0).getBoolean("dark",false);try{notes=new JSONArray(getPreferences(0).getString("notes","[]"));}catch(Exception e){}home();}
  TextView button(String text,LinearLayout parent,Runnable run){
   TextView v=new TextView(this);v.setText(text);v.setTextSize(16);v.setTextColor(fg());v.setGravity(17);v.setPadding(17,19,17,19);
@@ -84,9 +93,11 @@ public class MainActivity extends Activity {
   button("B",controls2,()->format(new StyleSpan(Typeface.BOLD)));
   button("I",controls2,()->format(new StyleSpan(Typeface.ITALIC)));
   button("U",controls2,()->format(new UnderlineSpan()));
-  button("🔤 FONT +",controls2,()->body.setTextSize(body.getTextSize()/getResources().getDisplayMetrics().scaledDensity+2));
-  button("🔡 FONT −",controls2,()->body.setTextSize(Math.max(12,body.getTextSize()/getResources().getDisplayMetrics().scaledDensity-2)));
-  body=field("Scrie sau dictează aici…",true);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
+  button("🔤 FONT +",controls2,()->changeFontSize(2));
+  button("🔡 FONT −",controls2,()->changeFontSize(-2));
+  body=field("Scrie sau dictează aici…",true);
+  body.setTextSize(fontSizeSp());title.setTextSize(fontSizeSp());
+  root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
   if(index>=0){JSONObject o=notes.optJSONObject(index);if(o!=null){title.setText(o.optString("title"));body.setText(o.optString("body"));}}
   before=body.getText().toString();
   body.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){}public void afterTextChanged(Editable e){if(!loading&&!before.equals(e.toString())){undo.push(before);if(undo.size()>50)undo.remove(0);before=e.toString();redo.clear();status.setText("Modificări în curs…");}}});
