@@ -21,6 +21,8 @@ final class ReminderScreens {
  final MainActivity a;
  EditText title,description,commandField;
  TextView dateLabel,timeLabel,soundLabel,repeatLabel,voiceFeedback;
+ CheckBox textOption,voiceOption;
+ boolean showText=true,speakText=false;
  long at;
  String sound="",soundName="Sunetul implicit al telefonului",repeat="O singură dată";
  JSONObject editing;
@@ -111,7 +113,9 @@ final class ReminderScreens {
     :(a.dark?new int[]{0xff4A382B,0xff3D2D24}:new int[]{0xffFFF3D9,0xffF3E1BE}));
   paper.setCornerRadius(a.dp(8));
   paper.setStroke(a.dp(1),a.dark?0xff806951:0xffD6BA86);
-  v.setBackground(paper);return v;
+  v.setBackground(a.glassSurface(false,false,false));
+  v.setElevation(a.dp(3));
+  return v;
  }
  void dayEvents(Calendar day){
   enter();
@@ -140,6 +144,9 @@ final class ReminderScreens {
   Calendar selected=Calendar.getInstance();
   if(existing!=null){at=existing.optLong("at");repeat=existing.optString("repeat","O singură dată");}
   else{selected.add(Calendar.HOUR_OF_DAY,1);selected.set(Calendar.MINUTE,0);selected.set(Calendar.SECOND,0);at=selected.getTimeInMillis();repeat="O singură dată";}
+  // Setarea se salvează individual la fiecare memento; cele vechi rămân text.
+  showText=existing==null||existing.optBoolean("showText",true);
+  speakText=existing!=null&&existing.optBoolean("speakText",false);
   // Globalul suprascrie melodia fiecărui memento, inclusiv cele vechi.
   sound=ReminderKit.globalSound(a,existing==null?"":existing.optString("sound",""));
   soundName=ReminderKit.globalSoundName(a,existing==null?"Sunetul implicit al telefonului":existing.optString("soundName","Sunetul implicit al telefonului"));
@@ -152,6 +159,29 @@ final class ReminderScreens {
   content.addView(title);
   description=a.field("Detalii (opțional)",true);description.setMinLines(2);description.setMaxLines(4);
   description.setText(existing==null?initialBody:existing.optString("details"));content.addView(description);
+  a.section(content,"🧠 Cum vrei să apară mementoul?");
+  textOption=new CheckBox(a);
+  textOption.setText("☑ Mesaj scris pe ecran");
+  textOption.setChecked(showText);
+  textOption.setTextSize(18);textOption.setTextColor(a.fg());
+  textOption.setPadding(a.dp(12),a.dp(11),a.dp(10),a.dp(11));
+  textOption.setBackground(a.glassSurface(false,true,false));
+  LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);
+  cp.setMargins(a.dp(4),a.dp(5),a.dp(4),a.dp(5));content.addView(textOption,cp);
+  voiceOption=new CheckBox(a);
+  voiceOption.setText("🔊 Citește mesajul vocal");
+  voiceOption.setChecked(speakText);
+  voiceOption.setTextSize(18);voiceOption.setTextColor(a.fg());
+  voiceOption.setPadding(a.dp(12),a.dp(11),a.dp(10),a.dp(11));
+  voiceOption.setBackground(a.glassSurface(false,true,false));
+  LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-1,-2);
+  vp.setMargins(a.dp(4),a.dp(5),a.dp(4),a.dp(5));content.addView(voiceOption,vp);
+  textOption.setOnCheckedChangeListener((v,checked)->showText=checked);
+  voiceOption.setOnCheckedChangeListener((v,checked)->speakText=checked);
+  TextView modeHelp=new TextView(a);
+  modeHelp.setText("Bifează una sau amândouă. Vocea va citi titlul și detaliile în română, dacă telefonul are sinteză vocală.");
+  modeHelp.setTextColor(a.fg());modeHelp.setTextSize(14);
+  modeHelp.setPadding(a.dp(13),a.dp(6),a.dp(9),a.dp(10));content.addView(modeHelp);
   commandField=a.field("Comandă: Amintește-mi pe 30 octombrie la ora 12:46 să...",true);
   commandField.setMinLines(2);commandField.setMaxLines(3);content.addView(commandField);
   voiceFeedback=new TextView(a);voiceFeedback.setTextColor(a.fg());voiceFeedback.setPadding(12,8,12,8);
@@ -180,7 +210,9 @@ final class ReminderScreens {
   a.tile("▶ Ascultă",tests,()->testSound());
   a.tile("■ Oprește test",tests,()->stopPreview());
   LinearLayout realTest=new LinearLayout(a);realTest.setOrientation(LinearLayout.HORIZONTAL);content.addView(realTest);
-  a.tile("🔊 Test alarmă reală",realTest,()->ReminderKit.testAlarm(a,sound));
+  a.tile("🔊 Test alarmă reală",realTest,()->ReminderKit.testAlarm(a,sound,showText,speakText,
+   title.getText().toString().trim().isEmpty()?"Probă memento":title.getText().toString().trim(),
+   description.getText().toString()));
   a.tile("🔇 Oprește orice sunet",realTest,()->ReminderKit.stopFromUi(a));
   a.section(content,"✅ Confirmă mementoul");
   LinearLayout action=new LinearLayout(a);action.setOrientation(LinearLayout.VERTICAL);content.addView(action);
@@ -266,12 +298,17 @@ final class ReminderScreens {
  boolean save(){
   String name=title.getText().toString().trim();
   if(name.isEmpty()){title.setError("Spune ce trebuie să îți amintești");return false;}
+  if(!showText&&!speakText){
+   Toast.makeText(a,"Bifează cel puțin Mesaj scris sau Citire vocală.",Toast.LENGTH_LONG).show();
+   return false;
+  }
   if(at<=System.currentTimeMillis()){Toast.makeText(a,"Alege o dată și o oră din viitor.",Toast.LENGTH_LONG).show();return false;}
   try{
    JSONObject o=editing==null?new JSONObject():new JSONObject(editing.toString());
    if(editing==null)o.put("id",(int)(System.currentTimeMillis()&0x7fffffff));
    o.put("title",name);o.put("details",description.getText().toString());
    o.put("at",at);o.put("repeat",repeat);o.put("sound",sound);o.put("soundName",soundName);
+   o.put("showText",showText);o.put("speakText",speakText);
    int id=o.optInt("id");
    // Persistăm sincron, verificăm abia apoi programarea exactă a alarmei.
    if(!ReminderKit.save(a,o)||ReminderKit.find(a,id)==null){
