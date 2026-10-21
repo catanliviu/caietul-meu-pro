@@ -4,6 +4,9 @@ import android.app.*;
 import android.os.*;
 import android.content.*;
 import android.graphics.Color;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.graphics.Typeface;
 import android.speech.RecognizerIntent;
 import android.text.*;
@@ -30,20 +33,95 @@ public class MainActivity extends Activity {
  int bg(){return dark?0xff151b29:0xfff2f5ff;}
  int fg(){return dark?Color.WHITE:0xff182238;}
  int panel(){return dark?0xff283247:Color.WHITE;}
+ int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
+ static final String[] NOTE_COLORS={"Negru / natural","Albastru","Verde","Vișiniu","Mov"};
+ static final int[] NOTE_LIGHT={0xff182238,0xff174D9A,0xff14653B,0xff912B49,0xff623B97};
+ static final int[] NOTE_DARK={0xffF4F6FF,0xffA2C8FF,0xffA1E0BB,0xffFFADC2,0xffCEB3FF};
+ int noteColorIndex(){return Math.max(0,Math.min(NOTE_COLORS.length-1,getPreferences(0).getInt("global_note_color",0)));}
+ int noteColor(){int i=noteColorIndex();return dark?NOTE_DARK[i]:NOTE_LIGHT[i];}
+ void applyNoteAppearance(){
+  if(body!=null){body.setTextColor(noteColor());body.setTextSize(fontSizeSp());}
+  if(title!=null){title.setTextColor(noteColor());title.setTextSize(fontSizeSp());}
+ }
+ void selectNoteColor(){
+  LinearLayout chooser=new LinearLayout(this);chooser.setOrientation(LinearLayout.VERTICAL);
+  chooser.setPadding(dp(16),dp(8),dp(16),dp(8));chooser.setBackgroundColor(panel());
+  AlertDialog dialog=new AlertDialog.Builder(this).setTitle("🎨 Culoarea permanentă a textului")
+   .setView(chooser).setNegativeButton("Anulează",null).create();
+  for(int i=0;i<NOTE_COLORS.length;i++){
+   final int index=i;
+   TextView swatch=new TextView(this);
+   swatch.setText((noteColorIndex()==i?"✓  ":"●  ")+NOTE_COLORS[i]+"   Aa");
+   swatch.setTextSize(19);swatch.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+   swatch.setGravity(Gravity.CENTER_VERTICAL);swatch.setMinHeight(dp(52));
+   swatch.setPadding(dp(18),dp(8),dp(8),dp(8));
+   swatch.setTextColor(dark?NOTE_DARK[i]:NOTE_LIGHT[i]);
+   GradientDrawable background=new GradientDrawable();
+   background.setColor(panel());background.setCornerRadius(dp(12));
+   if(noteColorIndex()==i)background.setStroke(dp(2),dark?0xff7FAAFF:0xff3267C9);
+   swatch.setBackground(background);
+   chooser.addView(swatch,new LinearLayout.LayoutParams(-1,-2));
+   swatch.setOnClickListener(v->{
+    boolean ok=getPreferences(0).edit().putInt("global_note_color",index).commit();
+    if(ok){applyNoteAppearance();Toast.makeText(this,"✓ Culoarea "+NOTE_COLORS[index]+" a fost memorată",Toast.LENGTH_SHORT).show();}
+    else Toast.makeText(this,"Nu s-a putut salva culoarea",Toast.LENGTH_LONG).show();
+    dialog.dismiss();
+   });
+  }
+  dialog.show();
+ }
+ void section(LinearLayout parent,String heading){
+  TextView h=new TextView(this);h.setText(heading);h.setTextColor(fg());h.setTextSize(17);
+  h.setTypeface(Typeface.DEFAULT,Typeface.BOLD);h.setPadding(dp(12),dp(15),dp(9),dp(5));
+  parent.addView(h,new LinearLayout.LayoutParams(-1,-2));
+ }
+ TextView tile(String name,LinearLayout row,Runnable action){
+  TextView v=button(name,row,action);
+  LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)v.getLayoutParams();
+  p.width=0;p.height=-2;p.weight=1;v.setLayoutParams(p);
+  v.setMinHeight(dp(64));return v;
+ }
  // FONT GLOBAL: același pentru notițele vechi, noi și după repornire.
  float fontSizeSp(){return Math.max(12f,Math.min(40f,getPreferences(0).getFloat("global_font_sp",19f)));}
  void changeFontSize(int delta){
   float newSize=Math.max(12f,Math.min(40f,fontSizeSp()+delta));
   boolean saved=getPreferences(0).edit().putFloat("global_font_sp",newSize).commit();
-  if(body!=null)body.setTextSize(newSize);
-  if(title!=null)title.setTextSize(newSize);
+  applyNoteAppearance();
   Toast.makeText(this,(saved?"✓ Font permanent: ":"Eroare la salvarea fontului: ")+(int)newSize+" sp",Toast.LENGTH_SHORT).show();
  }
  @Override public void onCreate(Bundle b){super.onCreate(b);dark=getPreferences(0).getBoolean("dark",false);try{notes=new JSONArray(getPreferences(0).getString("notes","[]"));}catch(Exception e){}home();}
  TextView button(String text,LinearLayout parent,Runnable run){
-  TextView v=new TextView(this);v.setText(text);v.setTextSize(16);v.setTextColor(fg());v.setGravity(17);v.setPadding(17,19,17,19);
-  android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();d.setColor(panel());d.setCornerRadius(22);v.setBackground(d);
-  LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.setMargins(4,5,4,5);parent.addView(v,p);v.setOnClickListener(w->run.run());return v;
+  String lower=text.toLowerCase(new Locale("ro","RO"));
+  boolean danger=lower.contains("oprește")||lower.contains("opreste")||lower.contains("șterge")||lower.contains("sterge");
+  boolean primary=lower.contains("salvează")||lower.contains("salveaza")||
+   lower.contains("notiță nouă")||lower.contains("memento vocal")||
+   lower.contains("nu uita")||lower.contains("memento nou")||
+   lower.contains("spune comanda")||lower.contains("execută textul");
+  boolean positive=!danger&&!primary&&(lower.contains("test alarm")||
+   lower.contains("probă alarm")||lower.contains("ascultă"));
+  // Paletă coerentă: albastru = acțiune principală, roșu = oprire, verde = test.
+  int surface=danger?(dark?0xff54303C:0xffFFF0F1)
+   :primary?(dark?0xff3467C6:0xff255EC4)
+   :positive?(dark?0xff214E4A:0xffE0F4EA):panel();
+  int textColor=danger?(dark?0xffFFB9C2:0xff9D2845)
+   :primary?Color.WHITE
+   :positive?(dark?0xffB9F2DB:0xff11613F):fg();
+  int border=danger?(dark?0xff965061:0xffEDB8C0)
+   :primary?(dark?0xff6793EA:0xff4B7FE0)
+   :positive?(dark?0xff477F70:0xffACDCC5):(dark?0xff43536D:0xffDCE3F3);
+  TextView v=new TextView(this);v.setText(text);v.setTextSize(15.5f);
+  v.setTextColor(textColor);v.setGravity(Gravity.CENTER);
+  v.setTypeface(Typeface.DEFAULT,(primary||danger)?Typeface.BOLD:Typeface.NORMAL);
+  v.setPadding(dp(15),dp(13),dp(15),dp(13));v.setMinHeight(dp(51));
+  GradientDrawable shape=new GradientDrawable();
+  shape.setColor(surface);shape.setCornerRadius(dp(17));shape.setStroke(dp(1),border);
+  v.setBackground(new RippleDrawable(ColorStateList.valueOf(dark?0x40FFFFFF:0x33000000),shape,null));
+  v.setElevation(dp(1.5f));v.setClickable(true);v.setFocusable(true);
+  v.setContentDescription(text);
+  LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(parent.getOrientation()==LinearLayout.VERTICAL?-1:-2,-2);
+  p.setMargins(dp(4),dp(4),dp(4),dp(5));parent.addView(v,p);
+  v.setOnClickListener(w->run.run());
+  return v;
  }
  LinearLayout vertical(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(12,15,12,10);l.setBackgroundColor(bg());setContentView(l);return l;}
  LinearLayout line(LinearLayout parent){LinearLayout l=new LinearLayout(this);l.setOrientation(0);HorizontalScrollView sc=new HorizontalScrollView(this);sc.addView(l);parent.addView(sc);return l;}
@@ -55,25 +133,44 @@ public class MainActivity extends Activity {
  }
  void persist(){getPreferences(0).edit().putString("notes",notes.toString()).putBoolean("dark",dark).apply();}
  void home(){
-  current=-1;remindersActive=false;if(reminders!=null)reminders.stopPreview();root=vertical();LinearLayout row=line(root);
-  button("➕ NOTIȚĂ NOUĂ",row,()->editor(-1));
-  button("🧠 NU UITA",row,()->mementouri().list());
-  button("🔇 OPREȘTE SUNETUL",row,()->ReminderKit.stopFromUi(this));
-  button("🎙️ MEMENTO VOCAL",row,()->{mementouri().form(null,"","");mementouri().dictate();});
-  button("📅 CALENDAR",row,()->mementouri().showCalendar());
-  button("🌙 / ☀️",row,()->{dark=!dark;persist();home();});
-  search=field("🔎 Caută notițe",false);root.addView(search);
-  LinearLayout list=new LinearLayout(this);list.setOrientation(1);ScrollView sc=new ScrollView(this);sc.addView(list);root.addView(sc);
-  Runnable render=()->{list.removeAllViews();String q=search.getText().toString().toLowerCase(Locale.ROOT);
-   for(int i=notes.length()-1;i>=0;i--){JSONObject o=notes.optJSONObject(i);if(o==null)continue;
+  current=-1;remindersActive=false;
+  if(reminders!=null)reminders.stopPreview();root=vertical();
+  TextView brand=new TextView(this);brand.setText("🧠 Nu Uita");
+  brand.setTextSize(28);brand.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+  brand.setTextColor(fg());brand.setPadding(dp(10),dp(5),dp(8),dp(0));root.addView(brand);
+  TextView subtitle=new TextView(this);subtitle.setText("Notițe, calendar și mementouri într-un singur loc");
+  subtitle.setTextSize(13);subtitle.setTextColor(dark?0xffADBBD3:0xff5A6980);
+  subtitle.setPadding(dp(11),0,dp(9),dp(6));root.addView(subtitle);
+  LinearLayout first=new LinearLayout(this);first.setOrientation(LinearLayout.HORIZONTAL);root.addView(first);
+  tile("➕ Notiță nouă",first,()->editor(-1));
+  tile("🎙️ Memento vocal",first,()->{mementouri().form(null,"","");mementouri().dictate();});
+  LinearLayout second=new LinearLayout(this);second.setOrientation(LinearLayout.HORIZONTAL);root.addView(second);
+  tile("🧠 Nu Uita — mementouri",second,()->mementouri().list());
+  tile("📅 Calendar",second,()->mementouri().showCalendar());
+  LinearLayout third=new LinearLayout(this);third.setOrientation(LinearLayout.HORIZONTAL);root.addView(third);
+  tile("🔇 Oprește sunetul",third,()->ReminderKit.stopFromUi(this));
+  tile("🌙 / ☀️ Temă",third,()->{dark=!dark;persist();home();});
+  section(root,"📚 Notițele mele");
+  search=field("🔎 Caută în notițe",false);root.addView(search);
+  LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
+  ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.addView(list);
+  root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
+  Runnable render=()->{
+   list.removeAllViews();String q=search.getText().toString().toLowerCase(Locale.ROOT);
+   for(int i=notes.length()-1;i>=0;i--){
+    JSONObject o=notes.optJSONObject(i);if(o==null)continue;
     String t=o.optString("title","Fără titlu"),b=o.optString("body","");
     if(!(t+" "+b).toLowerCase(Locale.ROOT).contains(q))continue;
     final int index=i;
     TextView noteRow=button("📝 "+t+"\n"+b.substring(0,Math.min(75,b.length())),list,()->editor(index));
-    noteRow.setTextSize(fontSizeSp());
+    noteRow.setTextSize(fontSizeSp());noteRow.setTextColor(noteColor());noteRow.setGravity(Gravity.CENTER_VERTICAL);
    }
   };
-  search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){render.run();}public void afterTextChanged(Editable e){}});
+  search.addTextChangedListener(new TextWatcher(){
+   public void beforeTextChanged(CharSequence s,int st,int c,int a){}
+   public void onTextChanged(CharSequence s,int st,int before,int count){render.run();}
+   public void afterTextChanged(Editable e){}
+  });
   render.run();
  }
  void editor(int index){
@@ -95,10 +192,13 @@ public class MainActivity extends Activity {
   button("B",controls2,()->format(new StyleSpan(Typeface.BOLD)));
   button("I",controls2,()->format(new StyleSpan(Typeface.ITALIC)));
   button("U",controls2,()->format(new UnderlineSpan()));
-  button("🔤 FONT +",controls2,()->changeFontSize(2));
-  button("🔡 FONT −",controls2,()->changeFontSize(-2));
+  section(root,"✏️ Aspect text • salvat automat pentru toate notițele");
+  LinearLayout fontTools=new LinearLayout(this);fontTools.setOrientation(LinearLayout.HORIZONTAL);root.addView(fontTools);
+  tile("A+ Mărește",fontTools,()->changeFontSize(2));
+  tile("A− Micșorează",fontTools,()->changeFontSize(-2));
+  tile("🎨 Culoare",fontTools,()->selectNoteColor());
   body=field("Scrie sau dictează aici…",true);
-  body.setTextSize(fontSizeSp());title.setTextSize(fontSizeSp());
+  applyNoteAppearance();
   root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
   if(index>=0){JSONObject o=notes.optJSONObject(index);if(o!=null){title.setText(o.optString("title"));body.setText(o.optString("body"));}}
   before=body.getText().toString();
