@@ -90,21 +90,53 @@ final class RomanianReminderParser {
   for(int i=0;i<MONTH_NAMES.length;i++)if(MONTH_NAMES[i].equals(month))return i+1;
   return -1;
  }
+ // Curățăm sufixele vocale de salvare fără să ștergem mesajul utilizatorului.
+ private static String tidyMessage(String raw){
+  if(raw==null)return "";
+  String s=raw.trim().replaceAll("(?iu)\\s*[,;.]?\\s*(?:și|si)?\\s*salveaz(?:ă|a)?(?:-?o)?\\s*[.!]*$","").trim();
+  s=s.replaceAll("^[\\s:;,.-]+|[\\s:;,.-]+$","").trim();
+  if(s.matches("(?iu)^(respective|următoarele|urmatoarele|menționate|mentionate|de mai sus|acestea|asta)$"))return "";
+  return s;
+ }
+ private static boolean commandOnly(String s){
+  String n=normalize(s);
+  return n.matches("(?s)^(?:imi |mi |te rog |va rog )?(?:faci|creezi|creaza|creeaza|setezi|programezi|pui|adaugi|trimiti)\\b.*") &&
+    !n.matches("(?s).*\\b(?:cumpar|beau|iau|sun|platesc|merg|verific|ridic|fac sport)\\b.*");
+ }
  private static String details(String spoken){
-  Matcher m=Pattern.compile("(?iu)\\b(?:cu\\s+)?(?:detaliile|detalii|descrierea|descriere)\\s*[:,-]?\\s*(.+)$").matcher(spoken);
-  String value="";
-  if(m.find())value=m.group(1);
-  else{
-   m=Pattern.compile("(?iu)\\b(?:să|sa)\\s+(.+)$").matcher(spoken);
-   while(m.find())value=m.group(1); // ultima acțiune dictată
-   if(value.isEmpty()){
-    m=Pattern.compile("(?iu)\\b(?:pentru|despre)\\s+(.+)$").matcher(spoken);
-    if(m.find())value=m.group(1);
-   }
+  // Prioritate mesajului explicit după „detaliile: ...”.
+  Matcher explicit=Pattern.compile("(?iu)\\b(?:cu\\s+)?(?:detaliile|detalii|descrierea|descriere)\\s*[:,-]?\\s*(.+)$").matcher(spoken);
+  if(explicit.find()){
+   String value=tidyMessage(explicit.group(1));
+   if(!value.isEmpty())return value;
   }
-  value=value.replaceAll("(?iu)\\s*(?:[,;.]?\\s*(?:și|si)\\s*)?salveaz(?:ă|a)?(?:-?o)?\\s*[.!]*$","").trim();
-  if(value.matches("(?iu)^(respective|următoarele|urmatoarele|menționate|mentionate|de mai sus)$"))return "";
-  return value;
+  // La comenzi precum «Vreau să faci un memento ... să cumpăr pâine»
+  // ultimul «să» introduce ACȚIUNEA de citit, nu instrucțiunea de creare.
+  Matcher actions=Pattern.compile("(?iu)\\b(?:să|sa)\\s+").matcher(spoken);
+  String chosen="";
+  while(actions.find()){
+   String candidate=tidyMessage(spoken.substring(actions.end()));
+   if(!candidate.isEmpty()&&!commandOnly(candidate))chosen=candidate;
+  }
+  if(!chosen.isEmpty())return chosen;
+  Matcher subject=Pattern.compile("(?iu)\\b(?:despre|pentru)\\s+(.+)$").matcher(spoken);
+  if(subject.find()){
+   String s=tidyMessage(subject.group(1));
+   if(!s.matches("(?iu)^(?:anul|luna|data|ziua|ora)\\b.*"))return s;
+  }
+  return "";
+ }
+ // Exact mesajul transmis către Text-to-Speech (fără «Memento. Memento»).
+ static String speechText(String title,String details){
+  String t=title==null?"":title.trim();
+  String d=details==null?"":details.trim();
+  boolean generic=t.isEmpty()||t.equalsIgnoreCase("Memento")||t.equalsIgnoreCase("Notificare");
+  if(!d.isEmpty()){
+   if(generic||t.equalsIgnoreCase(d)||d.toLowerCase(new Locale("ro","RO")).startsWith(t.toLowerCase(new Locale("ro","RO"))))
+    return d;
+   return t+". "+d;
+  }
+  return generic?"":t;
  }
  static Result parse(String speech,long currentTime,TimeZone tz){
   if(speech==null||speech.trim().isEmpty())return Result.fail("Nu am primit cuvintele de la microfon.");
