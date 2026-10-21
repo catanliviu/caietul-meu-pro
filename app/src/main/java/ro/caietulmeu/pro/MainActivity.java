@@ -141,7 +141,7 @@ public class MainActivity extends Activity {
   Toast.makeText(this,(saved?"✓ Font permanent: ":"Eroare la salvarea fontului: ")+(int)newSize+" sp",Toast.LENGTH_SHORT).show();
  }
  @Override public void onCreate(Bundle b){super.onCreate(b);dark=getPreferences(0).getBoolean("dark",false);try{notes=new JSONArray(getPreferences(0).getString("notes","[]"));}catch(Exception e){}home();}
- // Sticlă 3D bombată la acțiunile importante; restul rămâne discret.
+ // Sticlă 3D bombată pentru TOATE butoanele aplicației.
  Drawable glassSurface(boolean danger,boolean primary,boolean positive){
   return glassSurface(danger,primary,positive,false);
  }
@@ -179,14 +179,6 @@ public class MainActivity extends Activity {
    glass.setLayerInset(4,dp(1),dp(1),dp(1),pressed?dp(1):dp(4));
    return glass;
   }
-  int[] colors=dark?(danger?new int[]{0xAF76484A,0x93402D2D}:positive?
-   new int[]{0xB34E6F61,0x93405243}:new int[]{0xAA6E5B49,0x94504438})
-   :(danger?new int[]{0xEFFFF6F5,0xC8F2D7D4}:positive?
-   new int[]{0xF1F4FFEF,0xC7D4E9CF}:new int[]{0xF9FFFDF6,0xC9F6E7CE});
-  GradientDrawable surface=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,colors);
-  surface.setCornerRadius(radius);
-  surface.setStroke(dp(1),dark?0xB1C7B5A0:0xC2C2A783);
-  return surface;
  }
  TextView button(String text,LinearLayout parent,Runnable run){
   String lower=text.toLowerCase(new Locale("ro","RO"));
