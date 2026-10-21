@@ -604,7 +604,7 @@ final class ReminderScreens {
    }
    awaitingSpokenMessage=false;
    title.setText(message);
-   description.setText(message);
+   description.setText(""); // Mesajul apare o singură dată și este citit o singură dată.
    if(commandField!=null)commandField.setText("🎙️ Mesaj dictat: "+message);
    if(voiceFeedback!=null)voiceFeedback.setText("✅ Mesaj preluat: «"+message+"». Va fi afișat și rostit.");
    // Singurul memento este salvat cu data/ora deja recunoscută.
@@ -630,8 +630,13 @@ final class ReminderScreens {
   }
   at=p.at;
   if(!p.details.isEmpty()){
-   title.setText(p.title);
-   description.setText(p.details);
+   if(voiceReminderMode){
+    title.setText(p.details);  // Tot textul, nu un titlu prescurtat.
+    description.setText("");  // Evităm repetarea aceluiași mesaj pe ecran.
+   }else{
+    title.setText(p.title);
+    description.setText(p.details);
+   }
   }
   refresh();
   String usefulMessage=RomanianReminderParser.speechText(
