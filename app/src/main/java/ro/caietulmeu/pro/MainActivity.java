@@ -95,7 +95,11 @@ public class MainActivity extends Activity {
  void voice(){Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Dictează în română");i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);try{startActivityForResult(i,VOICE);}catch(Exception e){Toast.makeText(this,"Activează recunoașterea vocală Google",Toast.LENGTH_LONG).show();}}
  @Override protected void onActivityResult(int req,int res,Intent data){
   super.onActivityResult(req,res,data);
-  if(res==RESULT_OK && req==78 && reminders!=null){reminders.onVoice(data);return;}
+  if(req==78){
+   if(res==RESULT_OK&&data!=null&&reminders!=null)reminders.onVoice(data);
+   else Toast.makeText(this,"Dictarea a fost anulată sau nu a recunoscut vorbele. Încearcă din nou.",Toast.LENGTH_LONG).show();
+   return;
+  }
   if(res==RESULT_OK && req==79 && reminders!=null){reminders.onAudio(data);return;}
   if(req==VOICE&&res==RESULT_OK&&data!=null&&body!=null){
    ArrayList<String> matches=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
