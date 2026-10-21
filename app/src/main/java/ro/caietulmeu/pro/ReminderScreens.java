@@ -63,9 +63,28 @@ final class ReminderScreens {
   if(sorted.isEmpty())a.button("Nu ai încă mementouri. Apasă «Memento nou».",items,()->form(null,"",""));
   for(JSONObject o:sorted){
    int id=o.optInt("id");long when=o.optLong("at");
-   String label="🔔 "+o.optString("title","Memento")+"\n"+date(when)+", "+time(when);
+   String name=o.optString("title","Memento");
+   String label="🔔 "+name+"\n"+date(when)+", "+time(when);
    if(when<System.currentTimeMillis() && "O singură dată".equals(o.optString("repeat")))label+=" • Trecut";
-   a.button(label,items,()->form(ReminderKit.find(a,id),"",""));
+   LinearLayout itemRow=new LinearLayout(a);itemRow.setOrientation(LinearLayout.HORIZONTAL);
+   itemRow.setGravity(Gravity.CENTER_VERTICAL);
+   items.addView(itemRow,new LinearLayout.LayoutParams(-1,-2));
+   TextView open=a.button(label,itemRow,()->form(ReminderKit.find(a,id),"",""));
+   LinearLayout.LayoutParams op=(LinearLayout.LayoutParams)open.getLayoutParams();
+   op.width=0;op.weight=1;op.height=a.dp(77);open.setLayoutParams(op);
+   open.setGravity(Gravity.CENTER_VERTICAL);
+   TextView trash=a.button("🗑️",itemRow,()->new AlertDialog.Builder(a)
+    .setTitle("Ștergi acest memento?")
+    .setMessage("«"+name+"» va fi șters definitiv, iar alarma programată va fi anulată.")
+    .setNegativeButton("Anulează",null)
+    .setPositiveButton("Șterge",(d,w)->{
+      ReminderKit.delete(a,id);
+      Toast.makeText(a,"🗑️ Memento șters",Toast.LENGTH_SHORT).show();
+      list();
+    }).show());
+   LinearLayout.LayoutParams tp=(LinearLayout.LayoutParams)trash.getLayoutParams();
+   tp.width=a.dp(62);tp.height=a.dp(77);tp.weight=0;trash.setLayoutParams(tp);
+   trash.setTextSize(21);trash.setContentDescription("Șterge memento: "+name);
   }
  }
  void showCalendar(){calendar.set(Calendar.DAY_OF_MONTH,1);month();}
