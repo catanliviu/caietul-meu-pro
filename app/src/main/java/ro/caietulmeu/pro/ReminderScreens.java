@@ -19,18 +19,20 @@ import java.util.regex.*;
 
 final class ReminderScreens {
  final MainActivity a;
- EditText title,description;
- TextView dateLabel,timeLabel,soundLabel,repeatLabel;
+ EditText title,description,commandField;
+ TextView dateLabel,timeLabel,soundLabel,repeatLabel,voiceFeedback;
  long at;
  String sound="",soundName="Sunetul implicit al telefonului",repeat="O singură dată";
  JSONObject editing;
  Calendar calendar=Calendar.getInstance();
  Ringtone preview;
+ static Ringtone sharedPreview;
  final SimpleDateFormat dateFormat=new SimpleDateFormat("EEEE, dd MMMM yyyy",new Locale("ro","RO"));
  final SimpleDateFormat timeFormat=new SimpleDateFormat("HH:mm",Locale.ROOT);
  ReminderScreens(MainActivity activity){a=activity;}
  void enter(){a.current=-1;a.remindersActive=true;a.root=a.vertical();}
- void stopPreview(){if(preview!=null){preview.stop();preview=null;}}
+ static void stopSharedPreview(){if(sharedPreview!=null){try{sharedPreview.stop();}catch(Exception ignored){}sharedPreview=null;}}
+ void stopPreview(){stopSharedPreview();preview=null;}
  void navigation(String titleText){
   TextView h=new TextView(a);h.setText(titleText);h.setTextSize(23);h.setTextColor(a.fg());
   h.setPadding(15,12,10,12);a.root.addView(h);
@@ -134,8 +136,15 @@ final class ReminderScreens {
   content.addView(title);
   description=a.field("Detalii (opțional)",true);description.setMinLines(2);description.setMaxLines(4);
   description.setText(existing==null?initialBody:existing.optString("details"));content.addView(description);
+  commandField=a.field("Comandă: Amintește-mi pe 30 octombrie la ora 12:46 să...",true);
+  commandField.setMinLines(2);commandField.setMaxLines(3);content.addView(commandField);
+  voiceFeedback=new TextView(a);voiceFeedback.setTextColor(a.fg());voiceFeedback.setPadding(12,8,12,8);
+  voiceFeedback.setText("Spune data și ora prin voce. Dacă le înțeleg, salvez automat mementoul.");content.addView(voiceFeedback);
   LinearLayout speak=a.line(content);
-  a.button("🎙️ Spune prin voce",speak,()->dictate());
+  a.button("🎙️ Spune comanda",speak,()->dictate());
+  a.button("✅ Execută textul",speak,()->{
+   if(!processCommand(commandField.getText().toString()))Toast.makeText(a,"Nu am înțeles data și ora. Corectează textul de mai sus.",Toast.LENGTH_LONG).show();
+  });
   a.button("📅 Alege data",speak,()->datePicker());
   a.button("🕒 Alege ora",speak,()->timePicker());
   dateLabel=new TextView(a);dateLabel.setTextColor(a.fg());dateLabel.setTextSize(19);dateLabel.setPadding(14,12,14,9);content.addView(dateLabel);
@@ -218,7 +227,7 @@ final class ReminderScreens {
   stopPreview();
   try{
    Uri uri=sound.isEmpty()?RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM):Uri.parse(sound);
-   preview=RingtoneManager.getRingtone(a,uri);
+   preview=RingtoneManager.getRingtone(a,uri);sharedPreview=preview;
    if(preview!=null){if(Build.VERSION.SDK_INT>=28)preview.setLooping(false);preview.play();}
    else Toast.makeText(a,"Sunet indisponibil",Toast.LENGTH_SHORT).show();
   }catch(Exception e){Toast.makeText(a,"Nu pot reda acest sunet",Toast.LENGTH_SHORT).show();}
@@ -242,7 +251,9 @@ final class ReminderScreens {
  void dictate(){
   Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
   i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Exemplu: anul viitor, în februarie, pe 6, la ora 15:36, cu detaliile...");
+  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ro-RO");
+  i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
+  i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Exemplu: Memento pe 30 octombrie la ora 12:46 să sun medicul. Salvează.");
   try{a.startActivityForResult(i,78);}catch(Exception e){Toast.makeText(a,"Dictarea vocală nu este disponibilă",Toast.LENGTH_LONG).show();}
  }
 
@@ -346,8 +357,17 @@ final class ReminderScreens {
  void onVoice(Intent data){
   if(data==null||title==null)return;
   ArrayList<String> matches=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-  if(matches==null||matches.isEmpty())return;
-  String spoken=matches.get(0).trim();
+  if(matches==null||matches.isEmpty()){
+   Toast.makeText(a,"Nu am primit text de la microfon.",Toast.LENGTH_LONG).show();return;
+  }
+  for(String option:matches)if(processCommand(option.trim()))return;
+  if(commandField!=null)commandField.setText(matches.get(0).trim());
+  Toast.makeText(a,"Nu am înțeles data sau ora. Verifică transcrierea și apasă «Execută textul».",Toast.LENGTH_LONG).show();
+ }
+ boolean processCommand(String spoken){
+  if(spoken==null||spoken.trim().isEmpty())return false;
+  if(commandField!=null)commandField.setText(spoken);
+  if(voiceFeedback!=null)voiceFeedback.setText("Am auzit: "+spoken);
   String s=numericSpeech(normalized(spoken));
   Calendar now=Calendar.getInstance();
   int hour=0,minute=0;
@@ -420,20 +440,18 @@ final class ReminderScreens {
   }
 
   String details=dictatedDetails(spoken);
-  if(!details.isEmpty()){
-   title.setText(shortTitle(details));
-   description.setText(details);
-  }else{
-   title.setText(makeTitle(spoken));
-   // Preserve existing details when editing; empty on a new reminder.
+  if(details.matches("(?iu)^(respective|următoarele|urmatoarele|menționate|mentionate|de mai sus)$"))details="";
+  if(!details.isEmpty()){title.setText(shortTitle(details));description.setText(details);}
+  else{
+   String inferred=makeTitle(spoken);
+   if(title.getText().toString().trim().isEmpty())title.setText(inferred);
+   if(description.getText().toString().trim().isEmpty() && !"Notificare".equals(inferred))description.setText(inferred);
   }
   if(chosen!=null)at=chosen.getTimeInMillis();
   refresh();
-  if(foundTime&&chosen!=null&&chosen.after(now)){
-   save(); // Spoken year, month, day, time, details -> save and schedule.
-  }else{
-   String missing=!foundTime?"ora":chosen==null?"data completă":"o dată viitoare";
-   Toast.makeText(a,"Nu am înțeles "+missing+". Verifică formularul și completează sau dictează din nou.",Toast.LENGTH_LONG).show();
-  }
+  if(foundTime&&chosen!=null&&chosen.after(now)){save();return true;}
+  String missing=!foundTime?"ora":chosen==null?"data completă":"o dată viitoare";
+  if(voiceFeedback!=null)voiceFeedback.setText("Am auzit: "+spoken+"\nNu am înțeles "+missing+".");
+  return false;
  }
 }
