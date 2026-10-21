@@ -104,7 +104,14 @@ final class ReminderScreens {
  }
  TextView cell(String text,boolean marked){
   TextView v=new TextView(a);v.setText(text);v.setTextSize(13);v.setTextColor(a.fg());v.setGravity(Gravity.CENTER);
-  v.setPadding(1,14,1,14);v.setBackgroundColor(marked?(a.dark?0xff3a6488:0xffcce8ff):a.panel());return v;
+  v.setPadding(1,14,1,14);
+  android.graphics.drawable.GradientDrawable paper=new android.graphics.drawable.GradientDrawable(
+   android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+   marked?(a.dark?new int[]{0xff6F573E,0xff59402F}:new int[]{0xffF7DFA9,0xffE7C98B})
+    :(a.dark?new int[]{0xff4A382B,0xff3D2D24}:new int[]{0xffFFF3D9,0xffF3E1BE}));
+  paper.setCornerRadius(a.dp(8));
+  paper.setStroke(a.dp(1),a.dark?0xff806951:0xffD6BA86);
+  v.setBackground(paper);return v;
  }
  void dayEvents(Calendar day){
   enter();
