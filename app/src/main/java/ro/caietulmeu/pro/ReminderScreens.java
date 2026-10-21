@@ -200,10 +200,24 @@ final class ReminderScreens {
   voiceOption.setElevation(a.dp(4));
   LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-1,-2);
   vp.setMargins(a.dp(4),a.dp(5),a.dp(4),a.dp(5));content.addView(voiceOption,vp);
-  textOption.setOnCheckedChangeListener((v,checked)->showText=checked);
-  voiceOption.setOnCheckedChangeListener((v,checked)->speakText=checked);
+  textOption.setOnCheckedChangeListener((v,checked)->{
+   if(!checked&&!speakText){
+    textOption.setChecked(true);
+    Toast.makeText(a,"Lasă bifat măcar un mod: scris sau vocal.",Toast.LENGTH_LONG).show();
+    return;
+   }
+   showText=checked;persistModeForSavedReminder();
+  });
+  voiceOption.setOnCheckedChangeListener((v,checked)->{
+   if(!checked&&!showText){
+    voiceOption.setChecked(true);
+    Toast.makeText(a,"Lasă bifat măcar un mod: scris sau vocal.",Toast.LENGTH_LONG).show();
+    return;
+   }
+   speakText=checked;persistModeForSavedReminder();
+  });
   TextView modeHelp=new TextView(a);
-  modeHelp.setText("Bifează una sau amândouă. Vocea va citi titlul și detaliile în română, dacă telefonul are sinteză vocală.");
+  modeHelp.setText("Bifează una sau amândouă, înainte SAU după dictare. Dacă mementoul a fost deja salvat, schimbarea se memorează imediat. Testează vocea separat mai jos.");
   modeHelp.setTextColor(a.fg());modeHelp.setTextSize(14);
   modeHelp.setPadding(a.dp(13),a.dp(6),a.dp(9),a.dp(10));content.addView(modeHelp);
   commandField=a.field("Comandă: Amintește-mi pe 30 octombrie la ora 12:46 să...",true);
@@ -238,6 +252,11 @@ final class ReminderScreens {
    title.getText().toString().trim().isEmpty()?"Probă memento":title.getText().toString().trim(),
    description.getText().toString()));
   a.tile("🔇 Oprește orice sunet",realTest,()->ReminderKit.stopFromUi(a));
+  a.button("🗣️ TEST DOAR VOCEA ROMÂNĂ (fără melodie)",content,()->{
+   String words=title.getText().toString().trim();
+   ReminderKit.testVoice(a,words.isEmpty()?"Nu uita să bei apă":words,
+    description.getText().toString());
+  });
   a.section(content,"✅ Confirmă mementoul");
   LinearLayout action=new LinearLayout(a);action.setOrientation(LinearLayout.VERTICAL);content.addView(action);
   a.button("💾 SALVEAZĂ MEMENTO",action,()->save());
@@ -319,7 +338,27 @@ final class ReminderScreens {
    else Toast.makeText(a,"Sunet indisponibil",Toast.LENGTH_SHORT).show();
   }catch(Exception e){Toast.makeText(a,"Nu pot reda acest sunet",Toast.LENGTH_SHORT).show();}
  }
- boolean save(){
+ void persistModeForSavedReminder(){
+  if(editing==null)return; // Încă nu am dictat sau salvat mementoul.
+  try{
+   JSONObject changed=new JSONObject(editing.toString());
+   changed.put("showText",showText);
+   changed.put("speakText",speakText);
+   if(ReminderKit.save(a,changed)){
+    editing=changed;
+    String info="✅ Modul acestui memento s-a actualizat: "+
+     (showText?"scris":"")+(showText&&speakText?" + ":"")+(speakText?"vocal":"");
+    if(voiceFeedback!=null)voiceFeedback.setText(info);
+    Toast.makeText(a,info,Toast.LENGTH_LONG).show();
+   }else{
+    Toast.makeText(a,"Nu am putut salva opțiunile mementoului.",Toast.LENGTH_LONG).show();
+   }
+  }catch(Exception e){
+   Toast.makeText(a,"Nu am putut actualiza citirea vocală.",Toast.LENGTH_LONG).show();
+  }
+ }
+ boolean save(){return save(false);}
+ boolean save(boolean stayOnForm){
   String name=title.getText().toString().trim();
   if(name.isEmpty()){title.setError("Spune ce trebuie să îți amintești");return false;}
   if(!showText&&!speakText){
@@ -342,10 +381,17 @@ final class ReminderScreens {
    ReminderKit.cancel(a,id);
    boolean scheduled=ReminderKit.schedule(a,o);
    stopPreview();
+   editing=o; // Continuăm să edităm ACELAȘI memento după dictare.
    lastSavedLabel=(scheduled?"✅ SALVAT ȘI PROGRAMAT: ":"✅ SALVAT (alarma necesită permisiune): ")
     +name+" — "+date(at)+", "+time(at);
-   list();
-   Toast.makeText(a,lastSavedLabel,Toast.LENGTH_LONG).show();
+   if(stayOnForm){
+    if(voiceFeedback!=null)voiceFeedback.setText(lastSavedLabel+
+     "\nPoți bifa acum «Citește mesajul vocal»: se salvează imediat pentru acest memento.");
+    Toast.makeText(a,"Memento salvat. Poți schimba acum bifele scris/vocal.",Toast.LENGTH_LONG).show();
+   }else{
+    list();
+    Toast.makeText(a,lastSavedLabel,Toast.LENGTH_LONG).show();
+   }
    if(!scheduled)ReminderKit.askPermission(a);
    return true;
   }catch(Exception e){
@@ -488,8 +534,9 @@ final class ReminderScreens {
   }else if(title.getText().toString().trim().isEmpty())title.setText("Memento");
   refresh();
   if(voiceFeedback!=null)voiceFeedback.setText("✅ Am înțeles: "+date(at)+", "+time(at)+". Salvez automat.");
-  // Nu este necesar cuvântul «salvează» și nu există un al doilea buton obligatoriu.
-  return save();
+  // Salvăm automat, DAR rămânem în formular pentru bifarea ulterioară a citirii.
+  // Noua bifă persistă imediat și nu se creează un al doilea memento.
+  return save(true);
  }
 
 }
