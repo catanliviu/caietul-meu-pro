@@ -110,15 +110,23 @@ final class RomanianReminderParser {
    String value=tidyMessage(explicit.group(1));
    if(!value.isEmpty())return value;
   }
-  // La comenzi precum «Vreau să faci un memento ... să cumpăr pâine»
-  // ultimul «să» introduce ACȚIUNEA de citit, nu instrucțiunea de creare.
+  // Începem de la PRIMUL «să» care apare DUPĂ data/ora recunoscută.
+  // Dacă luam ultimul «să», pierdeam partea de început: «să cumpăr pâine
+  // și să iau lapte» devenea doar «iau lapte».
+  // Folosim textul original cu diacritice: nu tăiem și nu rescriem conținutul.
   Matcher actions=Pattern.compile("(?iu)\\b(?:să|sa)\\s+").matcher(spoken);
-  String chosen="";
   while(actions.find()){
-   String candidate=tidyMessage(spoken.substring(actions.end()));
-   if(!candidate.isEmpty()&&!commandOnly(candidate))chosen=candidate;
+   String prefix=normalize(spoken.substring(0,actions.start()));
+   boolean afterSchedule=Pattern.compile(
+    "\\b(?:ora|orele|minute|minut|ore|maine|poimaine|astazi|azi|"+MONTHS+")\\b|\\b\\d{1,2}\\s*[:.]\\s*\\d{1,2}\\b"
+   ).matcher(prefix).find();
+   if(!afterSchedule)continue; // «vreau SĂ faci un memento» este comandă, nu mesaj.
+   String candidate=tidyMessage(spoken.substring(actions.start()));
+   if(!candidate.isEmpty()&&!commandOnly(candidate))return candidate;
   }
-  if(!chosen.isEmpty())return chosen;
+  // Rezervă pentru exprimări fără «să»: «despre întâlnirea de mâine».
+  // Nu facem fallback la ultimele cuvinte, deoarece ar șterge mesajul.
+
   Matcher subject=Pattern.compile("(?iu)\\b(?:despre|pentru)\\s+(.+)$").matcher(spoken);
   if(subject.find()){
    String s=tidyMessage(subject.group(1));
