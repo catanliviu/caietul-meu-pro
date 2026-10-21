@@ -16,9 +16,10 @@ public final class ReminderKit {
  private ReminderKit() {}
  static final String STORE="caiet_mementouri_v1";
  static final String KEY="items";
- static final String CHANNEL="memento_alarm_silent_v2";
+ static final String CHANNEL="memento_alarm_silent_v3";
  static final String ALARM="ro.caietulmeu.pro.MEMENTO_ALARM";
  static final String STOP="ro.caietulmeu.pro.MEMENTO_STOP";
+ static final String STOP_ALL="ro.caietulmeu.pro.MEMENTO_STOP_ALL";
  static final int NOTIFICATION_ID=1107;
 
  // Mark a dismissed occurrence so pressing STOP before the alarm service starts
@@ -37,10 +38,36 @@ public final class ReminderKit {
   if(playingId>0)prefs.putLong("dismissed_"+playingId,now);
   prefs.commit(); // Nu reporni dintr-un START sosit imediat după oprire.
   ReminderScreens.stopSharedPreview();
-  if(active!=null){active.stopAudio();active.stopForeground(true);active.stopSelf();}
+  if(active!=null){
+   active.stopAudio();
+   try{active.stopForeground(true);}catch(Exception ignored){}
+   active.stopSelf();
+  }
+  // Oprește și serviciul real în cazul în care instanța activă nu e accesibilă.
   c.stopService(new Intent(c,SoundService.class));
   NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
   if(nm!=null)nm.cancel(NOTIFICATION_ID);
+  android.util.Log.i("NuUitaAlarm","STOP complet - requested="+requestedId+" playing="+playingId);
+ }
+ // TEST: pornește exact același serviciu și același MediaPlayer ca la memento.
+ static void testAlarm(Context c,String sound){
+  silence(c,0);
+  int sampleId=(int)(System.currentTimeMillis() & 0x7fffffff);
+  Intent intent=new Intent(c,SoundService.class).setAction("START")
+   .putExtra("id",sampleId)
+   .putExtra("title","Probă alarmă — Nu Uita")
+   .putExtra("sound",sound==null?"":sound);
+  try{
+   if(Build.VERSION.SDK_INT>=26)c.startForegroundService(intent);
+   else c.startService(intent);
+  }catch(Exception ex){
+   android.util.Log.e("NuUitaAlarm","Nu s-a putut porni testul",ex);
+   Toast.makeText(c,"Nu am putut porni alarma de test",Toast.LENGTH_LONG).show();
+  }
+ }
+ static void stopFromUi(Context c){
+  silence(c,0);
+  Toast.makeText(c,"🔇 Am trimis comanda de oprire a sunetului.",Toast.LENGTH_SHORT).show();
  }
  public static class StopReceiver extends BroadcastReceiver {
   @Override public void onReceive(Context c,Intent i){
@@ -158,16 +185,23 @@ public final class ReminderKit {
   int id;
   @Override public void onCreate(){super.onCreate();active=this;}
   synchronized void stopAudio(){
-   if(player!=null){
-    try{if(player.isPlaying())player.stop();}catch(Exception ignored){}
-    try{player.release();}catch(Exception ignored){}
-    player=null;
+   MediaPlayer p=player;
+   player=null;
+   if(p!=null){
+    try{p.setLooping(false);}catch(Exception ignored){}
+    try{p.stop();}catch(Exception ignored){}
+    try{p.reset();}catch(Exception ignored){}
+    try{p.release();}catch(Exception ignored){}
    }
+   android.util.Log.i("NuUitaAlarm","MediaPlayer oprit si eliberat");
   }
   @Override public IBinder onBind(Intent i){return null;}
   @Override public int onStartCommand(Intent i,int flags,int startId) {
-   if(i==null){stopSelf();return START_NOT_STICKY;}
-   if(STOP.equals(i.getAction())){silence(this,i.getIntExtra("id",id));return START_NOT_STICKY;}
+   if(i==null){stopAudio();stopSelf();return START_NOT_STICKY;}
+   if(STOP.equals(i.getAction())||STOP_ALL.equals(i.getAction())){
+    silence(this,i.getIntExtra("id",0));return START_NOT_STICKY;
+   }
+   if(!"START".equals(i.getAction())){stopSelf();return START_NOT_STICKY;}
    id=i.getIntExtra("id",0);
    if(recentlyDismissed(this,id)){stopAudio();stopSelf();return START_NOT_STICKY;}
    String title=i.getStringExtra("title");if(title==null||title.isEmpty())title="Memento";
@@ -176,7 +210,7 @@ public final class ReminderKit {
    NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
    NotificationChannel channel=new NotificationChannel(CHANNEL,"Alarme Memento",NotificationManager.IMPORTANCE_HIGH);
    channel.setDescription("Alarmă persistentă pentru programări");
-   channel.setSound(null,null);channel.enableVibration(true);nm.createNotificationChannel(channel);
+   channel.setSound(null,null);channel.enableVibration(false);nm.createNotificationChannel(channel);
    Intent open=new Intent(this,AlarmScreen.class).putExtra("id",id).putExtra("title",title);
    open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
    PendingIntent openPi=PendingIntent.getActivity(this,id,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
@@ -208,7 +242,7 @@ public final class ReminderKit {
      player=MediaPlayer.create(this,u,null,backupAttr,0);if(player!=null){player.setLooping(true);player.start();}
     }catch(Exception ignored){}
    }
-   return START_STICKY;
+   return START_NOT_STICKY;
   }
   @Override public void onDestroy(){
    stopAudio();
@@ -232,7 +266,10 @@ public final class ReminderKit {
    TextView stop=new TextView(this);stop.setText("OPREȘTE ALARMA");stop.setTextSize(22);stop.setTextColor(Color.WHITE);
    stop.setBackgroundColor(0xffb62d42);stop.setGravity(Gravity.CENTER);stop.setPadding(28,30,28,30);
    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,50,0,0);root.addView(stop,p);
-   stop.setOnClickListener(v->{ReminderKit.silence(this,id);finish();});
+   stop.setOnClickListener(v->{
+    ReminderKit.silence(this,id); // Nu scade volumul: închide MediaPlayer și serviciul.
+    finish();
+   });
    setContentView(root);
   }
  }
