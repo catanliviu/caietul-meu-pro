@@ -46,8 +46,10 @@ final class ReminderScreens {
   a.button("‹ Notițe",nav,()->a.home());
   a.button("📅 Calendar",nav,()->showCalendar());
   a.button("➕ Memento nou",nav,()->form(null,"",""));
+  a.button("🔊 PROBĂ ALARMĂ",nav,()->ReminderKit.testAlarm(a,""));
+  a.button("🔇 OPREȘTE ALARMA",nav,()->ReminderKit.stopFromUi(a));
   a.button("🎙️ Memento vocal",nav,()->{form(null,"","");dictate();});
-  navigation("🔔 Mementourile mele");
+  navigation("🧠 Nu Uita — Mementourile mele");
   if(!lastSavedLabel.isEmpty())navigation(lastSavedLabel);
   ScrollView scroll=new ScrollView(a);LinearLayout items=new LinearLayout(a);items.setOrientation(1);scroll.addView(items);a.root.addView(scroll);
   JSONArray data=ReminderKit.all(a);
@@ -160,6 +162,8 @@ final class ReminderScreens {
   LinearLayout tests=a.line(content);
   a.button("▶ Ascultă",tests,()->testSound());
   a.button("■ Oprește test",tests,()->stopPreview());
+  a.button("🔊 TEST ALARMĂ REALĂ",tests,()->ReminderKit.testAlarm(a,sound));
+  a.button("🔇 OPREȘTE ORICE SUNET",tests,()->ReminderKit.stopFromUi(a));
   LinearLayout action=a.line(content);
   a.button("💾 SALVEAZĂ MEMENTO",action,()->save());
   if(existing!=null){
