@@ -42,14 +42,16 @@ final class ReminderScreens {
  String time(long millis){return timeFormat.format(new Date(millis));}
  void list(){
   stopPreview();enter();
-  LinearLayout nav=a.line(a.root);
-  a.button("‹ Notițe",nav,()->a.home());
-  a.button("📅 Calendar",nav,()->showCalendar());
-  a.button("➕ Memento nou",nav,()->form(null,"",""));
-  a.button("🔊 PROBĂ ALARMĂ",nav,()->ReminderKit.testAlarm(a,""));
-  a.button("🔇 OPREȘTE ALARMA",nav,()->ReminderKit.stopFromUi(a));
-  a.button("🎙️ Memento vocal",nav,()->{form(null,"","");dictate();});
   navigation("🧠 Nu Uita — Mementourile mele");
+  LinearLayout actions=new LinearLayout(a);actions.setOrientation(LinearLayout.HORIZONTAL);a.root.addView(actions);
+  a.tile("➕ Memento nou",actions,()->form(null,"",""));
+  a.tile("🎙️ Memento vocal",actions,()->{form(null,"","");dictate();});
+  LinearLayout tools=new LinearLayout(a);tools.setOrientation(LinearLayout.HORIZONTAL);a.root.addView(tools);
+  a.tile("📅 Calendar",tools,()->showCalendar());
+  a.tile("‹ Notițe",tools,()->a.home());
+  LinearLayout audioTools=new LinearLayout(a);audioTools.setOrientation(LinearLayout.HORIZONTAL);a.root.addView(audioTools);
+  a.tile("🔊 Probă alarmă",audioTools,()->ReminderKit.testAlarm(a,""));
+  a.tile("🔇 Oprește alarma",audioTools,()->ReminderKit.stopFromUi(a));
   if(!lastSavedLabel.isEmpty())navigation(lastSavedLabel);
   ScrollView scroll=new ScrollView(a);LinearLayout items=new LinearLayout(a);items.setOrientation(1);scroll.addView(items);a.root.addView(scroll);
   JSONArray data=ReminderKit.all(a);
@@ -67,11 +69,11 @@ final class ReminderScreens {
  void showCalendar(){calendar.set(Calendar.DAY_OF_MONTH,1);month();}
  void month(){
   enter();
-  LinearLayout nav=a.line(a.root);
-  a.button("‹ Mementouri",nav,()->list());
-  a.button("◀",nav,()->{calendar.add(Calendar.MONTH,-1);month();});
-  a.button("▶",nav,()->{calendar.add(Calendar.MONTH,1);month();});
-  a.button("➕ Nou",nav,()->form(null,"",""));
+  LinearLayout nav=new LinearLayout(a);nav.setOrientation(LinearLayout.HORIZONTAL);a.root.addView(nav);
+  a.tile("‹ Mementouri",nav,()->list());
+  a.tile("◀",nav,()->{calendar.add(Calendar.MONTH,-1);month();});
+  a.tile("▶",nav,()->{calendar.add(Calendar.MONTH,1);month();});
+  a.tile("➕ Nou",nav,()->form(null,"",""));
   SimpleDateFormat head=new SimpleDateFormat("MMMM yyyy",new Locale("ro","RO"));
   navigation("📅 "+head.format(calendar.getTime()));
   LinearLayout header=new LinearLayout(a);a.root.addView(header);
@@ -147,27 +149,34 @@ final class ReminderScreens {
   commandField.setMinLines(2);commandField.setMaxLines(3);content.addView(commandField);
   voiceFeedback=new TextView(a);voiceFeedback.setTextColor(a.fg());voiceFeedback.setPadding(12,8,12,8);
   voiceFeedback.setText("Spune data și ora prin voce. Dacă le înțeleg, salvez automat mementoul.");content.addView(voiceFeedback);
-  LinearLayout speak=a.line(content);
-  a.button("🎙️ Spune comanda",speak,()->dictate());
-  a.button("✅ Execută textul",speak,()->{
+  a.section(content,"🎙️ Creează prin voce sau text");
+  LinearLayout speak=new LinearLayout(a);speak.setOrientation(LinearLayout.HORIZONTAL);content.addView(speak);
+  a.tile("🎙️ Spune comanda",speak,()->dictate());
+  a.tile("✅ Execută textul",speak,()->{
    if(!processCommand(commandField.getText().toString()))Toast.makeText(a,"Nu am înțeles data și ora. Corectează textul de mai sus.",Toast.LENGTH_LONG).show();
   });
-  a.button("📅 Alege data",speak,()->datePicker());
-  a.button("🕒 Alege ora",speak,()->timePicker());
+  a.section(content,"📅 Programare");
+  LinearLayout when=new LinearLayout(a);when.setOrientation(LinearLayout.HORIZONTAL);content.addView(when);
+  a.tile("📅 Alege data",when,()->datePicker());
+  a.tile("🕒 Alege ora",when,()->timePicker());
   dateLabel=new TextView(a);dateLabel.setTextColor(a.fg());dateLabel.setTextSize(19);dateLabel.setPadding(14,12,14,9);content.addView(dateLabel);
   timeLabel=new TextView(a);timeLabel.setTextColor(a.fg());timeLabel.setTextSize(19);timeLabel.setPadding(14,8,14,15);content.addView(timeLabel);
-  LinearLayout opts=a.line(content);
-  a.button("🔁 Repetare",opts,()->pickRepeat());
-  a.button("🎵 Alege sunet",opts,()->pickSound());
-  a.button("🎶 Audio din telefon",opts,()->pickAudio());
+  a.section(content,"🎵 Sunet și repetare");
+  LinearLayout opts=new LinearLayout(a);opts.setOrientation(LinearLayout.HORIZONTAL);content.addView(opts);
+  a.tile("🔁 Repetare",opts,()->pickRepeat());
+  a.tile("🎵 Alege sunet",opts,()->pickSound());
+  a.button("🎶 Alege o melodie din telefon",content,()->pickAudio());
   repeatLabel=new TextView(a);repeatLabel.setTextColor(a.fg());repeatLabel.setPadding(14,10,14,5);content.addView(repeatLabel);
   soundLabel=new TextView(a);soundLabel.setTextColor(a.fg());soundLabel.setPadding(14,8,14,10);content.addView(soundLabel);
-  LinearLayout tests=a.line(content);
-  a.button("▶ Ascultă",tests,()->testSound());
-  a.button("■ Oprește test",tests,()->stopPreview());
-  a.button("🔊 TEST ALARMĂ REALĂ",tests,()->ReminderKit.testAlarm(a,sound));
-  a.button("🔇 OPREȘTE ORICE SUNET",tests,()->ReminderKit.stopFromUi(a));
-  LinearLayout action=a.line(content);
+  a.section(content,"🔊 Testează alarma");
+  LinearLayout tests=new LinearLayout(a);tests.setOrientation(LinearLayout.HORIZONTAL);content.addView(tests);
+  a.tile("▶ Ascultă",tests,()->testSound());
+  a.tile("■ Oprește test",tests,()->stopPreview());
+  LinearLayout realTest=new LinearLayout(a);realTest.setOrientation(LinearLayout.HORIZONTAL);content.addView(realTest);
+  a.tile("🔊 Test alarmă reală",realTest,()->ReminderKit.testAlarm(a,sound));
+  a.tile("🔇 Oprește orice sunet",realTest,()->ReminderKit.stopFromUi(a));
+  a.section(content,"✅ Confirmă mementoul");
+  LinearLayout action=new LinearLayout(a);action.setOrientation(LinearLayout.VERTICAL);content.addView(action);
   a.button("💾 SALVEAZĂ MEMENTO",action,()->save());
   if(existing!=null){
    a.button("🗑️ ȘTERGE",action,()->new AlertDialog.Builder(a)
