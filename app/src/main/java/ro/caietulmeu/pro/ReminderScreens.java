@@ -156,9 +156,12 @@ final class ReminderScreens {
   ScrollView scroll=new ScrollView(a);LinearLayout content=new LinearLayout(a);content.setPadding(6,8,6,20);
   content.setOrientation(1);scroll.addView(content);a.root.addView(scroll);
   title=a.field("Ce trebuie să îți amintești?",false);title.setText(existing==null?initialTitle:existing.optString("title"));
+  title.setTypeface(a.preferredTypeface());title.setTextColor(a.noteColor());title.setTextSize(a.fontSizeSp());
   content.addView(title);
   description=a.field("Detalii (opțional)",true);description.setMinLines(2);description.setMaxLines(4);
-  description.setText(existing==null?initialBody:existing.optString("details"));content.addView(description);
+  description.setText(existing==null?initialBody:existing.optString("details"));
+  description.setTypeface(a.preferredTypeface());description.setTextColor(a.noteColor());description.setTextSize(a.fontSizeSp());
+  content.addView(description);
   a.section(content,"🧠 Cum vrei să apară mementoul?");
   textOption=new CheckBox(a);
   textOption.setText("☑ Mesaj scris pe ecran");
