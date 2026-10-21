@@ -22,6 +22,9 @@ public class MainActivity extends Activity {
  boolean dark=false,loading=false;
  int current=-1;
  JSONArray notes=new JSONArray();
+ ReminderScreens reminders;
+ boolean remindersActive=false;
+ ReminderScreens mementouri(){if(reminders==null)reminders=new ReminderScreens(this);return reminders;}
  String before="";
  Stack<String> undo=new Stack<>(),redo=new Stack<>();
  int bg(){return dark?0xff151b29:0xfff2f5ff;}
@@ -43,8 +46,11 @@ public class MainActivity extends Activity {
  }
  void persist(){getPreferences(0).edit().putString("notes",notes.toString()).putBoolean("dark",dark).apply();}
  void home(){
-  current=-1;root=vertical();LinearLayout row=line(root);
+  current=-1;remindersActive=false;if(reminders!=null)reminders.stopPreview();root=vertical();LinearLayout row=line(root);
   button("➕ NOTIȚĂ NOUĂ",row,()->editor(-1));
+  button("🔔 MEMENTO",row,()->mementouri().list());
+  button("🎙️ MEMENTO VOCAL",row,()->{mementouri().form(null,"","");mementouri().dictate();});
+  button("📅 CALENDAR",row,()->mementouri().showCalendar());
   button("🌙 / ☀️",row,()->{dark=!dark;persist();home();});
   search=field("🔎 Caută notițe",false);root.addView(search);
   LinearLayout list=new LinearLayout(this);list.setOrientation(1);ScrollView sc=new ScrollView(this);sc.addView(list);root.addView(sc);
@@ -59,9 +65,10 @@ public class MainActivity extends Activity {
   render.run();
  }
  void editor(int index){
-  current=index;root=vertical();LinearLayout top=line(root);
+  current=index;remindersActive=false;root=vertical();LinearLayout top=line(root);
   button("‹ Înapoi",top,()->{save();home();});
   button("💾 SALVEAZĂ",top,()->save());
+  button("🔔 MEMENTO",top,()->{save();mementouri().form(null,title.getText().toString(),body.getText().toString());});
   button("🗑️ ȘTERGE",top,()->new AlertDialog.Builder(this).setMessage("Ștergi notița?").setNegativeButton("Nu",null).setPositiveButton("Da",(d,w)->{if(current>=0){JSONArray a=new JSONArray();for(int i=0;i<notes.length();i++)if(i!=current)a.put(notes.opt(i));notes=a;persist();}home();}).show());
   status=new TextView(this);status.setTextColor(fg());status.setText("Modificări în curs…");root.addView(status);
   title=field("Titlul notiței",false);root.addView(title);
@@ -85,13 +92,25 @@ public class MainActivity extends Activity {
  }
  void replace(String s){loading=true;body.setText(s);BaseInputConnection.removeComposingSpans(body.getText());body.setSelection(s.length());before=s;loading=false;}
  void save(){if(body==null||title==null)return;try{JSONObject o=new JSONObject();o.put("title",title.getText().toString().trim().isEmpty()?"Fără titlu":title.getText().toString());o.put("body",body.getText().toString());o.put("time",System.currentTimeMillis());if(current<0){notes.put(o);current=notes.length()-1;}else notes.put(current,o);persist();status.setText("✓ Salvat pe telefon");}catch(Exception e){Toast.makeText(this,"Eroare la salvare",Toast.LENGTH_SHORT).show();}}
- void voice(){Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Dictează în română");try{startActivityForResult(i,VOICE);}catch(Exception e){Toast.makeText(this,"Activează recunoașterea vocală Google",Toast.LENGTH_LONG).show();}}
+ void voice(){Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Dictează în română");i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);try{startActivityForResult(i,VOICE);}catch(Exception e){Toast.makeText(this,"Activează recunoașterea vocală Google",Toast.LENGTH_LONG).show();}}
  @Override protected void onActivityResult(int req,int res,Intent data){
   super.onActivityResult(req,res,data);
+  if(req==78){
+   if(res==RESULT_OK&&data!=null&&reminders!=null)reminders.onVoice(data);
+   else Toast.makeText(this,"Dictarea a fost anulată sau nu a recunoscut vorbele. Încearcă din nou.",Toast.LENGTH_LONG).show();
+   return;
+  }
+  if(res==RESULT_OK && req==79 && reminders!=null){reminders.onAudio(data);return;}
   if(req==VOICE&&res==RESULT_OK&&data!=null&&body!=null){
    ArrayList<String> matches=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
    if(matches!=null&&!matches.isEmpty()){
-    String words=matches.get(0);int a=Math.max(0,body.getSelectionStart()),b=Math.max(0,body.getSelectionEnd());
+    String words=matches.get(0);
+    String normalized=ReminderScreens.normalized(words);
+    if(normalized.matches("(?s).*\\b(?:memento|notificare|alarma|aminteste|programeaza)\\b.*")
+     && normalized.matches("(?s).*\\b(?:ora|orele)\\b.*")){
+     String initialTitle=title.getText().toString(),initialBody=body.getText().toString();
+     save();mementouri().form(null,initialTitle,initialBody);mementouri().processCommand(words);return;
+    }int a=Math.max(0,body.getSelectionStart()),b=Math.max(0,body.getSelectionEnd());
     Editable e=body.getText();int start=Math.min(a,b),end=Math.max(a,b);
     String prefix=start>0&&!Character.isWhitespace(e.charAt(start-1))?" ":"";
     e.replace(start,end,prefix+words);BaseInputConnection.removeComposingSpans(e);body.setSelection(start+prefix.length()+words.length());
@@ -101,5 +120,6 @@ public class MainActivity extends Activity {
  void format(Object span){int a=body.getSelectionStart(),b=body.getSelectionEnd();if(a<0||b<=a){Toast.makeText(this,"Selectează mai întâi textul",Toast.LENGTH_SHORT).show();return;}body.getText().setSpan(span,a,b,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}
  void clipboard(boolean cut){int a=body.getSelectionStart(),b=body.getSelectionEnd();if(a<0||a==b){Toast.makeText(this,"Selectează textul",Toast.LENGTH_SHORT).show();return;}int x=Math.min(a,b),y=Math.max(a,b);((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("text",body.getText().subSequence(x,y).toString()));if(cut)body.getText().delete(x,y);}
  void paste(){android.content.ClipboardManager m=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(!m.hasPrimaryClip())return;CharSequence c=m.getPrimaryClip().getItemAt(0).coerceToText(this);int a=Math.max(0,body.getSelectionStart());body.getText().insert(a,c.toString());}
- @Override public void onBackPressed(){if(current>=0){save();home();}else super.onBackPressed();}
+ @Override protected void onResume(){super.onResume();ReminderKit.scheduleAll(this);}
+ @Override public void onBackPressed(){if(remindersActive){home();}else if(current>=0){save();home();}else super.onBackPressed();}
 }
