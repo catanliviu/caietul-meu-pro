@@ -148,7 +148,10 @@ final class RomanianReminderParser {
   String d=details==null?"":details.trim();
   boolean generic=t.isEmpty()||t.equalsIgnoreCase("Memento")||t.equalsIgnoreCase("Notificare");
   if(!d.isEmpty()){
-   if(generic||t.equalsIgnoreCase(d)||d.toLowerCase(new Locale("ro","RO")).startsWith(t.toLowerCase(new Locale("ro","RO"))))
+   // Titlul scurtat cu «…» poate fi prefixul detaliilor complete.
+   String prefix=t.endsWith("…")?t.substring(0,t.length()-1):t;
+   if(generic||t.equalsIgnoreCase(d)||
+      (!prefix.isEmpty()&&d.toLowerCase(new Locale("ro","RO")).startsWith(prefix.toLowerCase(new Locale("ro","RO")))))
     return d;
    return t+". "+d;
   }
