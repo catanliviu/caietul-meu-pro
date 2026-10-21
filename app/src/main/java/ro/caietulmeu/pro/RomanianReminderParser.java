@@ -121,7 +121,7 @@ final class RomanianReminderParser {
     "\\b(?:ora|orele|minute|minut|ore|maine|poimaine|astazi|azi|"+MONTHS+")\\b|\\b\\d{1,2}\\s*[:.]\\s*\\d{1,2}\\b"
    ).matcher(prefix).find();
    if(!afterSchedule)continue; // «vreau SĂ faci un memento» este comandă, nu mesaj.
-   String candidate=tidyMessage(spoken.substring(actions.start()));
+   String candidate=tidyMessage(spoken.substring(actions.end()));
    if(!candidate.isEmpty()&&!commandOnly(candidate))return candidate;
   }
   // Rezervă pentru exprimări fără «să»: «despre întâlnirea de mâine».
