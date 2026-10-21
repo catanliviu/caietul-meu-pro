@@ -19,6 +19,35 @@ public final class ReminderKit {
  static final String CHANNEL="memento_alarm_v1";
  static final String ALARM="ro.caietulmeu.pro.MEMENTO_ALARM";
  static final String STOP="ro.caietulmeu.pro.MEMENTO_STOP";
+ static final int NOTIFICATION_ID=1107;
+
+ // Mark a dismissed occurrence so pressing STOP before the alarm service starts
+ // cannot result in playback starting a moment later.
+ static boolean recentlyDismissed(Context c,int id){
+  if(id==0)return false;
+  android.content.SharedPreferences p=c.getSharedPreferences(STORE,0);
+  return p.getInt("dismissed_id",-1)==id
+   && Math.abs(System.currentTimeMillis()-p.getLong("dismissed_at",0))<20000;
+ }
+ static void silence(Context c,int id){
+  if(id!=0)c.getSharedPreferences(STORE,0).edit()
+   .putInt("dismissed_id",id).putLong("dismissed_at",System.currentTimeMillis()).commit();
+  SoundService active=SoundService.active;
+  if(active!=null && (id==0||active.id==id)){
+   active.stopAudio();
+   active.stopForeground(true);
+   active.stopSelf();
+  }else if(active==null) {
+   c.stopService(new Intent(c,SoundService.class));
+  }
+  NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
+  if(nm!=null && (active==null||id==0||active.id==id))nm.cancel(NOTIFICATION_ID);
+ }
+ public static class StopReceiver extends BroadcastReceiver {
+  @Override public void onReceive(Context c,Intent i){
+   if(STOP.equals(i.getAction()))silence(c,i.getIntExtra("id",0));
+  }
+ }
 
  static JSONArray all(Context c) {
   try { return new JSONArray(c.getSharedPreferences(STORE,0).getString(KEY,"[]")); }
@@ -113,7 +142,8 @@ public final class ReminderKit {
  public static class Trigger extends BroadcastReceiver {
   @Override public void onReceive(Context c,Intent i) {
    if(!ALARM.equals(i.getAction()))return;
-   int id=i.getIntExtra("id",0);JSONObject o=find(c,id);if(o==null)return;
+   int id=i.getIntExtra("id",0);if(recentlyDismissed(c,id))return;
+   JSONObject o=find(c,id);if(o==null)return;
    long newTime=next(o.optLong("at"),o.optString("repeat","O singură dată"),System.currentTimeMillis());
    if(newTime>0){try{o.put("at",newTime);save(c,o);schedule(c,o);}catch(Exception ignored){}}
    Intent s=new Intent(c,SoundService.class).setAction("START");
@@ -124,13 +154,23 @@ public final class ReminderKit {
   }
  }
  public static class SoundService extends Service {
+  static volatile SoundService active;
   MediaPlayer player;
   int id;
+  @Override public void onCreate(){super.onCreate();active=this;}
+  synchronized void stopAudio(){
+   if(player!=null){
+    try{if(player.isPlaying())player.stop();}catch(Exception ignored){}
+    try{player.release();}catch(Exception ignored){}
+    player=null;
+   }
+  }
   @Override public IBinder onBind(Intent i){return null;}
   @Override public int onStartCommand(Intent i,int flags,int startId) {
-   if(i==null)return START_STICKY;
-   if("STOP".equals(i.getAction())){stopSelf();return START_NOT_STICKY;}
+   if(i==null){stopSelf();return START_NOT_STICKY;}
+   if(STOP.equals(i.getAction())){silence(this,i.getIntExtra("id",id));return START_NOT_STICKY;}
    id=i.getIntExtra("id",0);
+   if(recentlyDismissed(this,id)){stopAudio();stopSelf();return START_NOT_STICKY;}
    String title=i.getStringExtra("title");if(title==null||title.isEmpty())title="Memento";
    String sound=i.getStringExtra("sound");
    NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
@@ -140,8 +180,9 @@ public final class ReminderKit {
    Intent open=new Intent(this,AlarmScreen.class).putExtra("id",id).putExtra("title",title);
    open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
    PendingIntent openPi=PendingIntent.getActivity(this,id,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-   Intent stop=new Intent(this,SoundService.class).setAction("STOP");
-   PendingIntent stopPi=PendingIntent.getService(this,100000+id,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+   Intent stop=new Intent(this,StopReceiver.class).setAction(STOP)
+    .setData(Uri.parse("memento://stop/"+id)).putExtra("id",id);
+   PendingIntent stopPi=PendingIntent.getBroadcast(this,100000+id,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
    Notification n=new Notification.Builder(this,CHANNEL)
      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
      .setContentTitle("🔔 "+title).setContentText("Alarma sună până apeși OPREȘTE.")
@@ -149,8 +190,9 @@ public final class ReminderKit {
      .setOngoing(true).setAutoCancel(false).setPriority(Notification.PRIORITY_HIGH)
      .setContentIntent(openPi).setFullScreenIntent(openPi,true)
      .addAction(android.R.drawable.ic_media_pause,"OPREȘTE",stopPi).build();
-   startForeground(1107,n);
-   if(player!=null){player.stop();player.release();player=null;}
+   startForeground(NOTIFICATION_ID,n);
+   stopAudio();
+   if(recentlyDismissed(this,id)){stopAudio();stopForeground(true);stopSelf();return START_NOT_STICKY;}
    try {
     Uri uri=sound!=null&&!sound.isEmpty()?Uri.parse(sound):RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
     if(uri==null)uri=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
@@ -167,7 +209,11 @@ public final class ReminderKit {
    }
    return START_STICKY;
   }
-  @Override public void onDestroy(){if(player!=null){player.stop();player.release();player=null;}super.onDestroy();}
+  @Override public void onDestroy(){
+   stopAudio();
+   if(active==this)active=null;
+   super.onDestroy();
+  }
  }
  public static class AlarmScreen extends Activity {
   @Override public void onCreate(Bundle b){
@@ -185,7 +231,7 @@ public final class ReminderKit {
    TextView stop=new TextView(this);stop.setText("OPREȘTE ALARMA");stop.setTextSize(22);stop.setTextColor(Color.WHITE);
    stop.setBackgroundColor(0xffb62d42);stop.setGravity(Gravity.CENTER);stop.setPadding(28,30,28,30);
    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,50,0,0);root.addView(stop,p);
-   stop.setOnClickListener(v->{stopService(new Intent(this,SoundService.class));finish();});
+   stop.setOnClickListener(v->{ReminderKit.silence(this,id);finish();});
    setContentView(root);
   }
  }

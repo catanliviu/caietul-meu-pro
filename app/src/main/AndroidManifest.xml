@@ -14,6 +14,7 @@
   <activity android:name="ro.caietulmeu.pro.ReminderKit$AlarmScreen" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true"/>
   <service android:name="ro.caietulmeu.pro.ReminderKit$SoundService" android:exported="false" android:foregroundServiceType="mediaPlayback" android:stopWithTask="false"/>
   <receiver android:name="ro.caietulmeu.pro.ReminderKit$Trigger" android:exported="false"/>
+  <receiver android:name="ro.caietulmeu.pro.ReminderKit$StopReceiver" android:exported="false"/>
   <receiver android:name="ro.caietulmeu.pro.ReminderKit$Reboot" android:exported="true">
    <intent-filter>
     <action android:name="android.intent.action.BOOT_COMPLETED"/>

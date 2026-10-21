@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
   current=-1;remindersActive=false;root=vertical();LinearLayout row=line(root);
   button("➕ NOTIȚĂ NOUĂ",row,()->editor(-1));
   button("🔔 MEMENTO",row,()->mementouri().list());
+  button("🎙️ MEMENTO VOCAL",row,()->{mementouri().form(null,"","");mementouri().dictate();});
   button("📅 CALENDAR",row,()->mementouri().showCalendar());
   button("🌙 / ☀️",row,()->{dark=!dark;persist();home();});
   search=field("🔎 Caută notițe",false);root.addView(search);

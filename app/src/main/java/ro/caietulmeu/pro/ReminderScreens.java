@@ -43,6 +43,7 @@ final class ReminderScreens {
   a.button("‹ Notițe",nav,()->a.home());
   a.button("📅 Calendar",nav,()->showCalendar());
   a.button("➕ Memento nou",nav,()->form(null,"",""));
+  a.button("🎙️ Memento vocal",nav,()->{form(null,"","");dictate();});
   navigation("🔔 Mementourile mele");
   ScrollView scroll=new ScrollView(a);LinearLayout items=new LinearLayout(a);items.setOrientation(1);scroll.addView(items);a.root.addView(scroll);
   JSONArray data=ReminderKit.all(a);
@@ -244,50 +245,148 @@ final class ReminderScreens {
   i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Spune data, ora și ce dorești să-ți amintești");
   try{a.startActivityForResult(i,78);}catch(Exception e){Toast.makeText(a,"Dictarea vocală nu este disponibilă",Toast.LENGTH_LONG).show();}
  }
+
+ // Romanian spoken numbers are often transcribed as words, including "patruzeci și șase".
+ static String normalized(String t){
+  return java.text.Normalizer.normalize(t.toLowerCase(new Locale("ro","RO")),java.text.Normalizer.Form.NFD)
+   .replaceAll("\\p{M}+","").replace('ş','s').replace('ţ','t');
+ }
+ static int spokenNumber(String term){
+  switch(term.trim()){
+   case "zero":return 0;
+   case "unu":case "una":case "un":return 1;
+   case "doi":case "doua":return 2;
+   case "trei":return 3;
+   case "patru":return 4;
+   case "cinci":return 5;
+   case "sase":return 6;
+   case "sapte":return 7;
+   case "opt":return 8;
+   case "noua":return 9;
+   case "zece":return 10;
+   case "unsprezece":return 11;
+   case "doisprezece":case "douasprezece":return 12;
+   case "treisprezece":return 13;
+   case "paisprezece":case "patrusprezece":return 14;
+   case "cincisprezece":return 15;
+   case "saisprezece":return 16;
+   case "saptesprezece":return 17;
+   case "optsprezece":return 18;
+   case "nouasprezece":return 19;
+   case "douazeci":return 20;
+   case "treizeci":return 30;
+   case "patruzeci":return 40;
+   case "cincizeci":return 50;
+   default:return -1;
+  }
+ }
+ static String numericSpeech(String speech){
+  String words="cincizeci|patruzeci|treizeci|douazeci|nouasprezece|optsprezece|saptesprezece|saisprezece|cincisprezece|patrusprezece|paisprezece|treisprezece|douasprezece|doisprezece|unsprezece|zece|noua|opt|sapte|sase|cinci|patru|trei|doua|doi|una|unu|zero";
+  Pattern p=Pattern.compile("\\b("+words+")(?:\\s+si\\s+(unu|una|doi|doua|trei|patru|cinci|sase|sapte|opt|noua))?\\b");
+  Matcher m=p.matcher(speech);StringBuffer out=new StringBuffer();
+  while(m.find()){
+   int base=spokenNumber(m.group(1)),unit=m.group(2)==null?0:spokenNumber(m.group(2));
+   m.appendReplacement(out,Matcher.quoteReplacement(Integer.toString(base+unit)));
+  }
+  m.appendTail(out);return out.toString();
+ }
+ static Calendar exactDate(int year,int month,int day,int hour,int minute){
+  if(year<2000||month<1||month>12||day<1||day>31||hour<0||hour>23||minute<0||minute>59)return null;
+  Calendar result=Calendar.getInstance();result.clear();result.setLenient(false);
+  result.set(year,month-1,day,hour,minute,0);
+  try{result.getTimeInMillis();return result;}catch(Exception e){return null;}
+ }
+ static Calendar dayNext(int day,int hour,int minute){
+  Calendar now=Calendar.getInstance();
+  for(int i=0;i<24;i++){
+   Calendar first=(Calendar)now.clone();first.set(Calendar.DAY_OF_MONTH,1);first.add(Calendar.MONTH,i);
+   Calendar candidate=exactDate(first.get(Calendar.YEAR),first.get(Calendar.MONTH)+1,day,hour,minute);
+   if(candidate!=null&&candidate.after(now))return candidate;
+  }
+  return null;
+ }
+ static String makeTitle(String utterance){
+  String s=numericSpeech(normalized(utterance));
+  String months="ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie";
+  s=s.replaceAll("\\b(?:la\\s+ora|ora|orele|la)\\s+\\d{1,2}(?:\\s*(?:[:.,]|si)\\s*\\d{1,2}|\\s+\\d{2})?\\b"," ");
+  s=s.replaceAll("\\b\\d{1,2}[./-]\\d{1,2}(?:[./-]\\d{4})?\\b"," ");
+  s=s.replaceAll("\\b(?:in\\s+)?(?:data\\s+de|ziua\\s+de|pe)\\s+\\d{1,2}(?:\\s+(?:"+months+"))?\\b"," ");
+  s=s.replaceAll("\\b\\d{1,2}\\s+(?:"+months+")(?:\\s+\\d{4})?\\b"," ");
+  s=s.replaceAll("\\b(?:astazi|azi|maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\\b"," ");
+  s=s.replaceAll("\\b(?:si\\s+)?salveaza(?:-?o)?\\b"," ");
+  s=s.replaceAll("\\b(?:vreau|as|vrea|te|rog|sa|imi|mi|faci|fa|creezi|creeaza|creaza|pui|pune|adauga|o|un|notificare|memento|alarma|aminte(?:ste|sti)|aminteste|pentru|in|pe|la|data|de|ziua|ora|orele|care)\\b"," ");
+  s=s.replaceAll("[^\\p{L}\\p{N}]+"," ").trim();
+  if(s.isEmpty())return "Notificare";
+  return s.substring(0,1).toUpperCase(new Locale("ro","RO"))+s.substring(1);
+ }
  void onVoice(Intent data){
   if(data==null||title==null)return;
   ArrayList<String> matches=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
   if(matches==null||matches.isEmpty())return;
-  String speech=matches.get(0).trim(),s=speech.toLowerCase(new Locale("ro","RO"));
-  String clean=speech.replaceFirst("(?iu)^amintește-mi\\s*(?:să\\s*)?","");
-  Matcher event=Pattern.compile("(?iu)\\bsă\\s+(.+)$").matcher(clean);
-  title.setText(event.find()?event.group(1).trim():clean);
-  Calendar c=Calendar.getInstance();c.setTimeInMillis(at);
-  Matcher hour=Pattern.compile("(?iu)(?:la\\s+ora|ora|la)\\s*(\\d{1,2})(?:[:.](\\d{2}))?").matcher(s);
-  boolean timeFound=false;
-  if(hour.find()){
-   int h=Integer.parseInt(hour.group(1));int m=hour.group(2)==null?0:Integer.parseInt(hour.group(2));
-   if(h<=23&&m<=59){c.set(Calendar.HOUR_OF_DAY,h);c.set(Calendar.MINUTE,m);c.set(Calendar.SECOND,0);timeFound=true;}
+  String spoken=matches.get(0).trim();
+  String s=numericSpeech(normalized(spoken));
+  Calendar now=Calendar.getInstance();
+  boolean foundTime=false,foundDate=false;
+  int hour=0,minute=0;
+  Matcher tm=Pattern.compile("\\b(?:la\\s+ora|ora|orele|la)\\s+(\\d{1,2})(?:\\s*(?:[:.,]|si)\\s*(\\d{1,2})|\\s+(\\d{2}))?\\b").matcher(s);
+  if(tm.find()){
+   hour=Integer.parseInt(tm.group(1));
+   minute=tm.group(2)!=null?Integer.parseInt(tm.group(2)):tm.group(3)!=null?Integer.parseInt(tm.group(3)):0;
+   foundTime=hour<=23&&minute<=59;
   }
-  if(s.contains("poimâine")||s.contains("poimaine")){Calendar today=Calendar.getInstance();c.set(today.get(Calendar.YEAR),today.get(Calendar.MONTH),today.get(Calendar.DAY_OF_MONTH));c.add(Calendar.DAY_OF_YEAR,2);}
-  else if(s.contains("mâine")||s.contains("maine")){Calendar today=Calendar.getInstance();c.set(today.get(Calendar.YEAR),today.get(Calendar.MONTH),today.get(Calendar.DAY_OF_MONTH));c.add(Calendar.DAY_OF_YEAR,1);}
-  else{
-   String[] days={"luni","marți","miercuri","joi","vineri","sâmbătă","duminică"};
-   int[] values={Calendar.MONDAY,Calendar.TUESDAY,Calendar.WEDNESDAY,Calendar.THURSDAY,Calendar.FRIDAY,Calendar.SATURDAY,Calendar.SUNDAY};
-   boolean found=false;
-   for(int i=0;i<days.length;i++)if(s.contains(days[i])||(i==1&&s.contains("marti"))||(i==5&&s.contains("sambata"))){
-    Calendar today=Calendar.getInstance();c.set(today.get(Calendar.YEAR),today.get(Calendar.MONTH),today.get(Calendar.DAY_OF_MONTH));
-    int delta=(values[i]-c.get(Calendar.DAY_OF_WEEK)+7)%7;
-    if(delta==0&&c.getTimeInMillis()<=System.currentTimeMillis())delta=7;
-    c.add(Calendar.DAY_OF_YEAR,delta);found=true;break;
-   }
-   Matcher numeric=Pattern.compile("(?iu)(?:pe\\s+)?(?:data\\s+de\\s+)?(\\d{1,2})[./-](\\d{1,2})(?:[./-](\\d{4}))?").matcher(s);
-   if(numeric.find()){
-    int d=Integer.parseInt(numeric.group(1)),mon=Integer.parseInt(numeric.group(2)),year=numeric.group(3)==null?Calendar.getInstance().get(Calendar.YEAR):Integer.parseInt(numeric.group(3));
-    if(d>=1&&d<=31&&mon>=1&&mon<=12){c.set(year,mon-1,d);if(numeric.group(3)==null&&c.getTimeInMillis()<System.currentTimeMillis())c.add(Calendar.YEAR,1);found=true;}
-   }
-   String[] months={"ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"};
-   for(int i=0;i<months.length;i++){
-    Matcher m=Pattern.compile("(?iu)(\\d{1,2})\\s+"+months[i]).matcher(s);
-    if(m.find()){int d=Integer.parseInt(m.group(1));if(d>=1&&d<=31){c.set(Calendar.MONTH,i);c.set(Calendar.DAY_OF_MONTH,d);
-     if(c.getTimeInMillis()<System.currentTimeMillis())c.add(Calendar.YEAR,1);found=true;}break;}
-   }
-   if(!found && s.matches("(?iu).*\\b(?:pe\\s+)?(?:data\\s+de\\s+)(\\d{1,2}).*")){
-    Matcher m=Pattern.compile("(?iu)data\\s+de\\s+(\\d{1,2})").matcher(s);
-    if(m.find()){int d=Integer.parseInt(m.group(1));if(d>0&&d<=31){c.set(Calendar.DAY_OF_MONTH,Math.min(d,c.getActualMaximum(Calendar.DAY_OF_MONTH)));if(c.getTimeInMillis()<System.currentTimeMillis())c.add(Calendar.MONTH,1);}}
+  // Do not auto-save an incomplete or invalid voice command.
+  Calendar chosen=null;
+  Matcher numeric=Pattern.compile("\\b(\\d{1,2})[./-](\\d{1,2})(?:[./-](\\d{4}))?\\b").matcher(s);
+  Matcher named=Pattern.compile("\\b(\\d{1,2})\\s+(ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie)(?:\\s+(\\d{4}))?\\b").matcher(s);
+  Matcher plain=Pattern.compile("\\b(?:(?:in\\s+)?data\\s+de|ziua\\s+de|pe)\\s+(\\d{1,2})\\b").matcher(s);
+  if(foundTime){
+   if(s.contains("poimaine")||s.contains("maine")||s.matches(".*\\b(?:azi|astazi)\\b.*")){
+    int plus=s.contains("poimaine")?2:s.contains("maine")?1:0;
+    Calendar d=(Calendar)now.clone();d.add(Calendar.DAY_OF_YEAR,plus);
+    chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
+    foundDate=chosen!=null;
+   }else if(numeric.find()){
+    int day=Integer.parseInt(numeric.group(1)),month=Integer.parseInt(numeric.group(2));
+    boolean hasYear=numeric.group(3)!=null;
+    int year=hasYear?Integer.parseInt(numeric.group(3)):now.get(Calendar.YEAR);
+    chosen=exactDate(year,month,day,hour,minute);
+    if(chosen!=null&&!hasYear&&!chosen.after(now))chosen=exactDate(year+1,month,day,hour,minute);
+    foundDate=chosen!=null;
+   }else if(named.find()){
+    String[] months={"ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"};
+    int day=Integer.parseInt(named.group(1)),month=Arrays.asList(months).indexOf(named.group(2))+1;
+    boolean hasYear=named.group(3)!=null;
+    int year=hasYear?Integer.parseInt(named.group(3)):now.get(Calendar.YEAR);
+    chosen=exactDate(year,month,day,hour,minute);
+    if(chosen!=null&&!hasYear&&!chosen.after(now))chosen=exactDate(year+1,month,day,hour,minute);
+    foundDate=chosen!=null;
+   }else if(plain.find()){
+    chosen=dayNext(Integer.parseInt(plain.group(1)),hour,minute);
+    foundDate=chosen!=null;
+   }else{
+    String[] names={"luni","marti","miercuri","joi","vineri","sambata","duminica"};
+    int[] week={Calendar.MONDAY,Calendar.TUESDAY,Calendar.WEDNESDAY,Calendar.THURSDAY,Calendar.FRIDAY,Calendar.SATURDAY,Calendar.SUNDAY};
+    for(int i=0;i<names.length;i++)if(Pattern.compile("\\b"+names[i]+"\\b").matcher(s).find()){
+     Calendar d=(Calendar)now.clone();
+     int delta=(week[i]-d.get(Calendar.DAY_OF_WEEK)+7)%7;
+     d.add(Calendar.DAY_OF_YEAR,delta);
+     chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
+     if(chosen!=null&&!chosen.after(now)){
+      d.add(Calendar.DAY_OF_YEAR,7);
+      chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
+     }
+     foundDate=chosen!=null;break;
+    }
    }
   }
-  at=c.getTimeInMillis();refresh();
-  Toast.makeText(a,"Verifică data și ora înainte să salvezi.",Toast.LENGTH_LONG).show();
+  title.setText(makeTitle(spoken));
+  if(chosen!=null)at=chosen.getTimeInMillis();
+  refresh();
+  if(foundTime&&foundDate&&chosen!=null&&chosen.after(now)){
+   save(); // One utterance -> saved locally and exact alarm scheduled.
+  }else{
+   String missing=!foundDate?"data":!foundTime?"ora":"o dată și oră viitoare";
+   Toast.makeText(a,"Nu am înțeles "+missing+". Spune, de exemplu: «Pe 30 la ora 12:46, amintește-mi să sun acasă».",Toast.LENGTH_LONG).show();
+  }
  }
 }
