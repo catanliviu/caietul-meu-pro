@@ -130,7 +130,22 @@ public class MainActivity extends Activity {
   TextView v=button(name,row,action);
   LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)v.getLayoutParams();
   p.width=0;p.height=-2;p.weight=1;v.setLayoutParams(p);
-  v.setMinHeight(dp(64));return v;
+  v.setMinHeight(dp(68));
+  v.setGravity(Gravity.CENTER);
+  v.setMaxLines(3);
+  return v;
+ }
+ // Grilă de 2 coloane: butoane identice ca lățime și înălțime.
+ TextView homeTile(String text,LinearLayout row,Runnable action){
+  TextView v=tile(text,row,action);
+  LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)v.getLayoutParams();
+  p.width=0;p.height=dp(84);p.weight=1;
+  p.setMargins(dp(5),dp(5),dp(5),dp(5));v.setLayoutParams(p);
+  v.setMaxLines(2);v.setGravity(Gravity.CENTER);
+  if(Build.VERSION.SDK_INT>=26)
+   v.setAutoSizeTextTypeUniformWithConfiguration(12,16,1,
+    android.util.TypedValue.COMPLEX_UNIT_SP);
+  return v;
  }
  // FONT GLOBAL: același pentru notițele vechi, noi și după repornire.
  float fontSizeSp(){return Math.max(12f,Math.min(40f,getPreferences(0).getFloat("global_font_sp",19f)));}
@@ -182,7 +197,7 @@ public class MainActivity extends Activity {
  }
  TextView button(String text,LinearLayout parent,Runnable run){
   String lower=text.toLowerCase(new Locale("ro","RO"));
-  boolean danger=lower.contains("oprește")||lower.contains("opreste")||lower.contains("șterge")||lower.contains("sterge");
+  boolean danger=lower.contains("oprește")||lower.contains("opreste")||lower.contains("șterge")||lower.contains("sterge")||lower.contains("🗑");
   boolean primary=lower.contains("salvează")||lower.contains("salveaza")||
    lower.contains("notiță nouă")||lower.contains("memento vocal")||
    lower.contains("nu uita")||lower.contains("memento nou")||
@@ -246,14 +261,14 @@ public class MainActivity extends Activity {
   subtitle.setTextSize(13);subtitle.setTextColor(dark?0xffDECEB1:0xff6F573B);
   subtitle.setPadding(dp(11),0,dp(9),dp(6));root.addView(subtitle);
   LinearLayout first=new LinearLayout(this);first.setOrientation(LinearLayout.HORIZONTAL);root.addView(first);
-  tile("➕ Notiță nouă",first,()->editor(-1));
-  tile("🎙️ Memento vocal",first,()->{mementouri().form(null,"","");mementouri().dictate();});
+  homeTile("➕ Notiță nouă",first,()->editor(-1));
+  homeTile("🎙️ Memento vocal",first,()->{mementouri().form(null,"","");mementouri().dictate();});
   LinearLayout second=new LinearLayout(this);second.setOrientation(LinearLayout.HORIZONTAL);root.addView(second);
-  tile("🧠 Nu Uita — mementouri",second,()->mementouri().list());
-  tile("📅 Calendar",second,()->mementouri().showCalendar());
+  homeTile("🧠 Mementouri",second,()->mementouri().list());
+  homeTile("📅 Calendar",second,()->mementouri().showCalendar());
   LinearLayout third=new LinearLayout(this);third.setOrientation(LinearLayout.HORIZONTAL);root.addView(third);
-  tile("🔇 Oprește sunetul",third,()->ReminderKit.stopFromUi(this));
-  tile("🌙 / ☀️ Temă",third,()->{dark=!dark;persist();home();});
+  homeTile("🔇 Oprește sunetul",third,()->ReminderKit.stopFromUi(this));
+  homeTile("🌙 / ☀️ Temă",third,()->{dark=!dark;persist();home();});
   section(root,"📚 Notițele mele");
   search=field("🔎 Caută în notițe",false);root.addView(search);
   LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
