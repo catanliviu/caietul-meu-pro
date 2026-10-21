@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+ <style name="Theme.NuUita" parent="android:style/Theme.Material.Light.NoActionBar">
+  <item name="android:colorAccent">#79512F</item>
+  <item name="android:buttonStyle">@style/Widget.NuUita.Glass</item>
+  <item name="android:buttonBarButtonStyle">@style/Widget.NuUita.Glass</item>
+ </style>
+ <style name="Widget.NuUita.Glass" parent="android:style/Widget.Material.Button">
+  <item name="android:background">@drawable/nuuita_glass_native_button</item>
+  <item name="android:minHeight">50dp</item>
+  <item name="android:minWidth">68dp</item>
+  <item name="android:paddingLeft">12dp</item>
+  <item name="android:paddingRight">12dp</item>
+  <item name="android:textColor">#4B3021</item>
+ </style>
+</resources>
