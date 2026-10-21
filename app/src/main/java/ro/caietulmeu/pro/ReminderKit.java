@@ -11,6 +11,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.Drawable;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.RippleDrawable;
+import android.widget.RemoteViews;
 import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
@@ -301,14 +302,33 @@ public final class ReminderKit {
    Intent stop=new Intent(this,StopReceiver.class).setAction(STOP)
     .setData(Uri.parse("memento://stop/"+id)).putExtra("id",id);
    PendingIntent stopPi=PendingIntent.getBroadcast(this,100000+id,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-   Notification n=new Notification.Builder(this,CHANNEL)
+   Notification.Builder builder=new Notification.Builder(this,CHANNEL)
      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
      .setContentTitle(showText?"🔔 "+title:"🔊 Memento vocal")
      .setContentText(showText?(details.isEmpty()?"Alarma sună până apeși OPREȘTE.":details):"Ascultă mesajul vocal. Apasă OPREȘTE pentru liniște.")
      .setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PUBLIC)
      .setOngoing(true).setAutoCancel(false).setPriority(Notification.PRIORITY_HIGH)
      .setContentIntent(openPi).setFullScreenIntent(openPi,true)
-     .addAction(android.R.drawable.ic_media_pause,"OPREȘTE",stopPi).build();
+     .addAction(android.R.drawable.ic_media_pause,"OPREȘTE",stopPi);
+   if(showText){
+    // Titlul notificării Android obișnuite NU acceptă Typeface personalizat.
+    // Rendăm aspectul ales în imagine pentru afișajul compact și extins.
+    try{
+     RemoteViews compact=new RemoteViews(getPackageName(),R.layout.nuuita_notification_text);
+     compact.setImageViewBitmap(R.id.styled_memento_image,
+      MementoNotificationArt.render(this,title,details,false));
+     RemoteViews expanded=new RemoteViews(getPackageName(),R.layout.nuuita_notification_text);
+     expanded.setImageViewBitmap(R.id.styled_memento_image,
+      MementoNotificationArt.render(this,title,details,true));
+     builder.setCustomContentView(compact);
+     builder.setCustomBigContentView(expanded);
+     builder.setCustomHeadsUpContentView(compact);
+     builder.setStyle(new Notification.DecoratedCustomViewStyle());
+    }catch(Exception ex){
+     android.util.Log.w("NuUitaMemento","Nu am putut afișa notificarea personalizată; revin la cea normală.",ex);
+    }
+   }
+   Notification n=builder.build();
    startForeground(NOTIFICATION_ID,n);
    stopAudio();
    if(recentlyDismissed(this,id)){stopAudio();stopForeground(true);stopSelf();return START_NOT_STICKY;}
