@@ -313,7 +313,7 @@ final class ReminderScreens {
   s=s.replaceAll("\\b(?:in\\s+)?(?:data\\s+de|ziua\\s+de|pe)\\s+\\d{1,2}(?:\\s+(?:"+months+"))?\\b"," ");
   s=s.replaceAll("\\b\\d{1,2}\\s+(?:"+months+")(?:\\s+\\d{4})?\\b"," ");
   s=s.replaceAll("\\b(?:astazi|azi|maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\\b"," ");
-  s=s.replaceAll("\\b(?:si\\s+)?salveaza(?:-?o)?\\b"," ");
+  s=s.replaceAll("\\b(?:si\\s+)?salveaz(?:a)?(?:-?o)?\\b"," ");
   s=s.replaceAll("\\b(?:vreau|as|vrea|te|rog|sa|imi|mi|faci|fa|creezi|creeaza|creaza|pui|pune|adauga|o|un|notificare|memento|alarma|aminte(?:ste|sti)|aminteste|pentru|in|pe|la|data|de|ziua|ora|orele|care)\\b"," ");
   s=s.replaceAll("[^\\p{L}\\p{N}]+"," ").trim();
   if(s.isEmpty())return "Notificare";
