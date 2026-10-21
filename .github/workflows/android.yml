@@ -22,6 +22,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Testează interpretarea vocală fără Android
+        run: |
+          mkdir -p /tmp/reminder-test
+          javac -encoding UTF-8 -d /tmp/reminder-test app/src/main/java/ro/caietulmeu/pro/RomanianReminderParser.java app/src/test/java/ro/caietulmeu/pro/ParserSmokeTest.java
+          java -cp /tmp/reminder-test ro.caietulmeu.pro.ParserSmokeTest
       - run: gradle assembleDebug --no-daemon
       - name: Verifică semnătura și compatibilitatea APK
         run: |
