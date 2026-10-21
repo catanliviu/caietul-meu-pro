@@ -242,7 +242,7 @@ final class ReminderScreens {
  void dictate(){
   Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
   i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Spune data, ora și ce dorești să-ți amintești");
+  i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Exemplu: anul viitor, în februarie, pe 6, la ora 15:36, cu detaliile...");
   try{a.startActivityForResult(i,78);}catch(Exception e){Toast.makeText(a,"Dictarea vocală nu este disponibilă",Toast.LENGTH_LONG).show();}
  }
 
@@ -305,19 +305,42 @@ final class ReminderScreens {
   }
   return null;
  }
+
+ // Keep the whole dictated description; a short excerpt is used as the title.
+ static String dictatedDetails(String spoken){
+  Matcher detail=Pattern.compile("(?iu)\\b(?:cu\\s+)?(?:detaliile|detalii|descrierea|descriere)\\s*[:,-]?\\s*(.+)$").matcher(spoken);
+  if(!detail.find())return "";
+  String value=detail.group(1).trim()
+   .replaceAll("(?iu)(?:\\s*[,;.]?\\s*(?:și|si)\\s*)?salveaz(?:ă|a)(?:-?o)?[\\s.!]*$","")
+   .replaceAll("^[\\s:,-]+|[\\s]+$","");
+  return value;
+ }
+ static String shortTitle(String details){
+  String s=details.trim();
+  if(s.isEmpty())return "Notificare";
+  int line=s.indexOf('\n');if(line>0)s=s.substring(0,line);
+  if(s.length()>62){
+   int last=s.lastIndexOf(' ',62);
+   s=s.substring(0,last>25?last:62).trim()+"…";
+  }
+  return s.substring(0,1).toUpperCase(new Locale("ro","RO"))+s.substring(1);
+ }
  static String makeTitle(String utterance){
   String s=numericSpeech(normalized(utterance));
   String months="ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie";
+  s=s.replaceAll("\\b(?:anul\\s+(?:viitor|urmator|acesta|asta|curent)|la\\s+anul|(?:in\\s+)?anul\\s+\\d{4})\\b"," ");
+  s=s.replaceAll("\\b(?:in\\s+)?luna\\s+(?:de\\s+)?(?:"+months+")\\b"," ");
   s=s.replaceAll("\\b(?:la\\s+ora|ora|orele|la)\\s+\\d{1,2}(?:\\s*(?:[:.,]|si)\\s*\\d{1,2}|\\s+\\d{2})?\\b"," ");
   s=s.replaceAll("\\b\\d{1,2}[./-]\\d{1,2}(?:[./-]\\d{4})?\\b"," ");
-  s=s.replaceAll("\\b(?:in\\s+)?(?:data\\s+de|ziua\\s+de|pe)\\s+\\d{1,2}(?:\\s+(?:"+months+"))?\\b"," ");
+  s=s.replaceAll("\\b(?:(?:in\\s+)?(?:data|ziua)\\s+(?:de\\s+)?|pe\\s+)\\d{1,2}\\b"," ");
   s=s.replaceAll("\\b\\d{1,2}\\s+(?:"+months+")(?:\\s+\\d{4})?\\b"," ");
+  s=s.replaceAll("\\b(?:"+months+")\\b"," ");
   s=s.replaceAll("\\b(?:astazi|azi|maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\\b"," ");
   s=s.replaceAll("\\b(?:si\\s+)?salveaz(?:a)?(?:-?o)?\\b"," ");
-  s=s.replaceAll("\\b(?:vreau|as|vrea|te|rog|sa|imi|mi|faci|fa|creezi|creeaza|creaza|pui|pune|adauga|o|un|notificare|memento|alarma|aminte(?:ste|sti)|aminteste|pentru|in|pe|la|data|de|ziua|ora|orele|care)\\b"," ");
+  s=s.replaceAll("\\b(?:vreau|as|vrea|te|rog|sa|imi|mi|faci|fa|creezi|creeaza|creaza|pui|pune|adauga|o|un|notificare|memento|alarma|aminte(?:ste|sti)|aminteste|pentru|in|pe|la|data|de|ziua|ora|orele|care|cu|detaliile|detalii|2026|2027)\\b"," ");
   s=s.replaceAll("[^\\p{L}\\p{N}]+"," ").trim();
   if(s.isEmpty())return "Notificare";
-  return s.substring(0,1).toUpperCase(new Locale("ro","RO"))+s.substring(1);
+  return shortTitle(s);
  }
  void onVoice(Intent data){
   if(data==null||title==null)return;
@@ -326,44 +349,59 @@ final class ReminderScreens {
   String spoken=matches.get(0).trim();
   String s=numericSpeech(normalized(spoken));
   Calendar now=Calendar.getInstance();
-  boolean foundTime=false,foundDate=false;
   int hour=0,minute=0;
+  boolean foundTime=false;
   Matcher tm=Pattern.compile("\\b(?:la\\s+ora|ora|orele|la)\\s+(\\d{1,2})(?:\\s*(?:[:.,]|si)\\s*(\\d{1,2})|\\s+(\\d{2}))?\\b").matcher(s);
   if(tm.find()){
    hour=Integer.parseInt(tm.group(1));
    minute=tm.group(2)!=null?Integer.parseInt(tm.group(2)):tm.group(3)!=null?Integer.parseInt(tm.group(3)):0;
    foundTime=hour<=23&&minute<=59;
   }
-  // Do not auto-save an incomplete or invalid voice command.
-  Calendar chosen=null;
+
+  // Year, month and day may arrive in any spoken order.
+  boolean nextYear=Pattern.compile("\\b(?:anul\\s+(?:viitor|urmator)|la\\s+anul)\\b").matcher(s).find();
+  boolean thisYear=Pattern.compile("\\b(?:anul\\s+(?:acesta|asta|curent))\\b").matcher(s).find();
+  Matcher absoluteYear=Pattern.compile("\\b(?:(?:in\\s+)?anul\\s+|in\\s+)(20\\d{2}|21\\d{2})\\b").matcher(s);
+  Integer requestedYear=nextYear?now.get(Calendar.YEAR)+1:thisYear?now.get(Calendar.YEAR):null;
+  if(absoluteYear.find())requestedYear=Integer.parseInt(absoluteYear.group(1));
+
+  String[] months={"ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"};
+  String monthNames=String.join("|",months);
+  Matcher monthMatch=Pattern.compile("\\b("+monthNames+")\\b").matcher(s);
+  int requestedMonth=monthMatch.find()?Arrays.asList(months).indexOf(monthMatch.group(1))+1:-1;
+
   Matcher numeric=Pattern.compile("\\b(\\d{1,2})[./-](\\d{1,2})(?:[./-](\\d{4}))?\\b").matcher(s);
-  Matcher named=Pattern.compile("\\b(\\d{1,2})\\s+(ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie)(?:\\s+(\\d{4}))?\\b").matcher(s);
-  Matcher plain=Pattern.compile("\\b(?:(?:in\\s+)?data\\s+de|ziua\\s+de|pe)\\s+(\\d{1,2})\\b").matcher(s);
+  Matcher named=Pattern.compile("\\b(\\d{1,2})\\s+("+monthNames+")(?:\\s+(\\d{4}))?\\b").matcher(s);
+  Matcher plain=Pattern.compile("\\b(?:(?:in\\s+)?(?:data|ziua)\\s+(?:de\\s+)?|pe\\s+)(\\d{1,2})\\b").matcher(s);
+  Calendar chosen=null;
   if(foundTime){
-   if(s.contains("poimaine")||s.contains("maine")||s.matches(".*\\b(?:azi|astazi)\\b.*")){
+   if(s.contains("poimaine")||s.contains("maine")||Pattern.compile("\\b(?:azi|astazi)\\b").matcher(s).find()){
     int plus=s.contains("poimaine")?2:s.contains("maine")?1:0;
     Calendar d=(Calendar)now.clone();d.add(Calendar.DAY_OF_YEAR,plus);
     chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
-    foundDate=chosen!=null;
    }else if(numeric.find()){
-    int day=Integer.parseInt(numeric.group(1)),month=Integer.parseInt(numeric.group(2));
-    boolean hasYear=numeric.group(3)!=null;
-    int year=hasYear?Integer.parseInt(numeric.group(3)):now.get(Calendar.YEAR);
-    chosen=exactDate(year,month,day,hour,minute);
-    if(chosen!=null&&!hasYear&&!chosen.after(now))chosen=exactDate(year+1,month,day,hour,minute);
-    foundDate=chosen!=null;
+    int d=Integer.parseInt(numeric.group(1)),m=Integer.parseInt(numeric.group(2));
+    boolean exactYear=numeric.group(3)!=null||requestedYear!=null;
+    int y=numeric.group(3)!=null?Integer.parseInt(numeric.group(3)):requestedYear!=null?requestedYear:now.get(Calendar.YEAR);
+    chosen=exactDate(y,m,d,hour,minute);
+    if(!exactYear&&chosen!=null&&!chosen.after(now))chosen=exactDate(y+1,m,d,hour,minute);
    }else if(named.find()){
-    String[] months={"ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"};
-    int day=Integer.parseInt(named.group(1)),month=Arrays.asList(months).indexOf(named.group(2))+1;
-    boolean hasYear=named.group(3)!=null;
-    int year=hasYear?Integer.parseInt(named.group(3)):now.get(Calendar.YEAR);
-    chosen=exactDate(year,month,day,hour,minute);
-    if(chosen!=null&&!hasYear&&!chosen.after(now))chosen=exactDate(year+1,month,day,hour,minute);
-    foundDate=chosen!=null;
+    int d=Integer.parseInt(named.group(1)),m=Arrays.asList(months).indexOf(named.group(2))+1;
+    boolean exactYear=named.group(3)!=null||requestedYear!=null;
+    int y=named.group(3)!=null?Integer.parseInt(named.group(3)):requestedYear!=null?requestedYear:now.get(Calendar.YEAR);
+    chosen=exactDate(y,m,d,hour,minute);
+    if(!exactYear&&chosen!=null&&!chosen.after(now))chosen=exactDate(y+1,m,d,hour,minute);
    }else if(plain.find()){
-    chosen=dayNext(Integer.parseInt(plain.group(1)),hour,minute);
-    foundDate=chosen!=null;
-   }else{
+    int d=Integer.parseInt(plain.group(1));
+    if(requestedMonth>0){
+     // February 6 next year -> the named month and relative year take precedence.
+     int y=requestedYear!=null?requestedYear:now.get(Calendar.YEAR);
+     chosen=exactDate(y,requestedMonth,d,hour,minute);
+     if(requestedYear==null&&chosen!=null&&!chosen.after(now))chosen=exactDate(y+1,requestedMonth,d,hour,minute);
+    }else if(requestedYear==null){
+     chosen=dayNext(d,hour,minute);
+    }
+   }else {
     String[] names={"luni","marti","miercuri","joi","vineri","sambata","duminica"};
     int[] week={Calendar.MONDAY,Calendar.TUESDAY,Calendar.WEDNESDAY,Calendar.THURSDAY,Calendar.FRIDAY,Calendar.SATURDAY,Calendar.SUNDAY};
     for(int i=0;i<names.length;i++)if(Pattern.compile("\\b"+names[i]+"\\b").matcher(s).find()){
@@ -375,18 +413,26 @@ final class ReminderScreens {
       d.add(Calendar.DAY_OF_YEAR,7);
       chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
      }
-     foundDate=chosen!=null;break;
+     break;
     }
    }
   }
-  title.setText(makeTitle(spoken));
+
+  String details=dictatedDetails(spoken);
+  if(!details.isEmpty()){
+   title.setText(shortTitle(details));
+   description.setText(details);
+  }else{
+   title.setText(makeTitle(spoken));
+   // Preserve existing details when editing; empty on a new reminder.
+  }
   if(chosen!=null)at=chosen.getTimeInMillis();
   refresh();
-  if(foundTime&&foundDate&&chosen!=null&&chosen.after(now)){
-   save(); // One utterance -> saved locally and exact alarm scheduled.
+  if(foundTime&&chosen!=null&&chosen.after(now)){
+   save(); // Spoken year, month, day, time, details -> save and schedule.
   }else{
-   String missing=!foundDate?"data":!foundTime?"ora":"o dată și oră viitoare";
-   Toast.makeText(a,"Nu am înțeles "+missing+". Spune, de exemplu: «Pe 30 la ora 12:46, amintește-mi să sun acasă».",Toast.LENGTH_LONG).show();
+   String missing=!foundTime?"ora":chosen==null?"data completă":"o dată viitoare";
+   Toast.makeText(a,"Nu am înțeles "+missing+". Verifică formularul și completează sau dictează din nou.",Toast.LENGTH_LONG).show();
   }
  }
 }
