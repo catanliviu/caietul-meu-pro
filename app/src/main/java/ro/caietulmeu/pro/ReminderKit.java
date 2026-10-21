@@ -357,8 +357,8 @@ public final class ReminderKit {
   }
  }
  /**
-  * Citim stilul global folosit de MainActivity.getPreferences(0), care utilizează
-  * numele local "MainActivity" ca fișier SharedPreferences.
+  * Același fișier de preferințe ca MainActivity.getPreferences(0).
+  * Numele diferă între aplicația normală și APK-urile TEST cu sufix.
   */
  static android.content.SharedPreferences mainEditorPrefs(Context c){
   // Activity.getPreferences(0) folosește Activity.getLocalClassName().
