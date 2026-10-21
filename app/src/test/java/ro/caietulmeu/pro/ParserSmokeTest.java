@@ -60,6 +60,25 @@ public final class ParserSmokeTest {
   spoken("Nu uita să bei apă","Nu uita să bei apă","Nu uita să bei apă");
   spoken("Sună medicul","La ora programată","Sună medicul. La ora programată");
   spoken("Memento","să beau apă","să beau apă");
+  String voiceMessage=RomanianReminderParser.cleanDictatedMessage("Nu uita să iei medicamentele, salvează");
+  if(!"Nu uita să iei medicamentele".equals(voiceMessage))
+   throw new AssertionError("Eroare mesaj dictat separat: "+voiceMessage);
+  tested++;
+  if(!RomanianReminderParser.cleanDictatedMessage("Memento").isEmpty())
+   throw new AssertionError("Nu trebuie salvat titlul generic drept mesaj vocal");
+  tested++;
+  RomanianReminderParser.Result dateOnly=RomanianReminderParser.parse(
+   "Vreau un memento pe data de 30 octombrie la ora 12:46",
+   NOW.getTimeInMillis(),TZ);
+  if(!dateOnly.valid||!RomanianReminderParser.speechText(dateOnly.title,dateOnly.details).isEmpty())
+   throw new AssertionError("Comanda fără mesaj trebuie să ceară a doua dictare.");
+  tested++;
+  RomanianReminderParser.Result complete=RomanianReminderParser.parse(
+   "Vreau un memento mâine la ora 11 să beau apă",
+   NOW.getTimeInMillis(),TZ);
+  if(!complete.valid||!"beau apă".equals(RomanianReminderParser.speechText(complete.title,complete.details)))
+   throw new AssertionError("Comanda completă trebuie să fie salvată automat text+voce.");
+  tested++;
   invalid("Vreau un memento cu detaliile respective");
   invalid("Notificare la ora 12:46");
   invalid("Memento pe 30 octombrie");
