@@ -3,6 +3,14 @@ package ro.caietulmeu.pro;
 import android.app.*;
 import android.content.*;
 import android.media.*;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.Drawable;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
@@ -32,7 +40,7 @@ public final class ReminderKit {
  }
 
  static final String KEY="items";
- static final String CHANNEL="memento_alarm_silent_v3";
+ static final String CHANNEL="memento_alarm_silent_v4";
  static final String ALARM="ro.caietulmeu.pro.MEMENTO_ALARM";
  static final String STOP="ro.caietulmeu.pro.MEMENTO_STOP";
  static final String STOP_ALL="ro.caietulmeu.pro.MEMENTO_STOP_ALL";
@@ -67,11 +75,18 @@ public final class ReminderKit {
  }
  // TEST: pornește exact același serviciu și același MediaPlayer ca la memento.
  static void testAlarm(Context c,String sound){
+  testAlarm(c,sound,true,false,"Probă alarmă — Nu Uita","");
+ }
+ static void testAlarm(Context c,String sound,boolean showText,boolean speakText,
+                       String title,String details){
   silence(c,0);
   int sampleId=(int)(System.currentTimeMillis() & 0x7fffffff);
   Intent intent=new Intent(c,SoundService.class).setAction("START")
    .putExtra("id",sampleId)
-   .putExtra("title","Probă alarmă — Nu Uita")
+   .putExtra("title",title)
+   .putExtra("details",details)
+   .putExtra("showText",showText)
+   .putExtra("speakText",speakText)
    .putExtra("sound",globalSound(c,sound==null?"":sound));
   try{
    if(Build.VERSION.SDK_INT>=26)c.startForegroundService(intent);
@@ -190,6 +205,9 @@ public final class ReminderKit {
    if(newTime>0){try{o.put("at",newTime);save(c,o);schedule(c,o);}catch(Exception ignored){}}
    Intent s=new Intent(c,SoundService.class).setAction("START");
    s.putExtra("id",id);s.putExtra("title",o.optString("title","Memento"));
+   s.putExtra("details",o.optString("details",""));
+   s.putExtra("showText",o.optBoolean("showText",true));
+   s.putExtra("speakText",o.optBoolean("speakText",false));
    s.putExtra("sound",globalSound(c,o.optString("sound","")));
    try{if(Build.VERSION.SDK_INT>=26)c.startForegroundService(s);else c.startService(s);}
    catch(Exception e){android.util.Log.e("Memento","Alarm service failed",e);}
@@ -198,9 +216,53 @@ public final class ReminderKit {
  public static class SoundService extends Service {
   static volatile SoundService active;
   MediaPlayer player;
+  TextToSpeech speech;
+  final Handler speechHandler=new Handler(Looper.getMainLooper());
   int id;
   @Override public void onCreate(){super.onCreate();active=this;}
+  void beginSpeech(String title,String details){
+   final int expectedId=id;
+   final String words="Memento. "+title+
+    (details==null||details.trim().isEmpty()?"":". "+details.trim());
+   // TTS este creat după player; volumul melodiei se reduce doar în timpul citirii.
+   speech=new TextToSpeech(getApplicationContext(),init->speechHandler.post(()->{
+    TextToSpeech engine=speech;
+    if(active!=this||id!=expectedId||recentlyDismissed(this,expectedId)||engine==null)return;
+    if(init!=TextToSpeech.SUCCESS){android.util.Log.w("NuUitaVoice","Sinteza vocală nu a pornit");return;}
+    int lang=engine.setLanguage(new Locale("ro","RO"));
+    if(lang==TextToSpeech.LANG_MISSING_DATA||lang==TextToSpeech.LANG_NOT_SUPPORTED){
+     Toast.makeText(getApplicationContext(),
+      "Pentru citire vocală instalează vocea română în setările Text-to-Speech.",
+      Toast.LENGTH_LONG).show();
+     return;
+    }
+    engine.setAudioAttributes(new AudioAttributes.Builder()
+     .setUsage(AudioAttributes.USAGE_ALARM)
+     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+    engine.setOnUtteranceProgressListener(new UtteranceProgressListener(){
+     @Override public void onStart(String utteranceId){}
+     @Override public void onDone(String utteranceId){restoreMusic(expectedId);}
+     @Override public void onError(String utteranceId){restoreMusic(expectedId);}
+    });
+    MediaPlayer current=player;
+    if(current!=null)try{current.setVolume(0.06f,0.06f);}catch(Exception ignored){}
+    int queued=engine.speak(words,TextToSpeech.QUEUE_FLUSH,null,"nuuita-"+expectedId);
+    if(queued==TextToSpeech.ERROR)restoreMusic(expectedId);
+   }));
+  }
+  void restoreMusic(int expectedId){
+   speechHandler.post(()->{
+    if(active!=this||id!=expectedId)return;
+    MediaPlayer current=player;
+    if(current!=null)try{current.setVolume(1f,1f);}catch(Exception ignored){}
+   });
+  }
   synchronized void stopAudio(){
+   TextToSpeech oldSpeech=speech;speech=null;
+   if(oldSpeech!=null){
+    try{oldSpeech.stop();}catch(Exception ignored){}
+    try{oldSpeech.shutdown();}catch(Exception ignored){}
+   }
    MediaPlayer p=player;
    player=null;
    if(p!=null){
@@ -221,13 +283,19 @@ public final class ReminderKit {
    id=i.getIntExtra("id",0);
    if(recentlyDismissed(this,id)){stopAudio();stopSelf();return START_NOT_STICKY;}
    String title=i.getStringExtra("title");if(title==null||title.isEmpty())title="Memento";
+   JSONObject stored=find(this,id);
+   final boolean showText=stored==null?i.getBooleanExtra("showText",true):stored.optBoolean("showText",true);
+   final boolean speakText=stored==null?i.getBooleanExtra("speakText",false):stored.optBoolean("speakText",false);
+   String details=stored==null?i.getStringExtra("details"):stored.optString("details","");
+   if(details==null)details="";
    String sound=globalSound(this,i.getStringExtra("sound"));
    ReminderScreens.stopSharedPreview();
    NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
    NotificationChannel channel=new NotificationChannel(CHANNEL,"Alarme Memento",NotificationManager.IMPORTANCE_HIGH);
    channel.setDescription("Alarmă persistentă pentru programări");
    channel.setSound(null,null);channel.enableVibration(false);nm.createNotificationChannel(channel);
-   Intent open=new Intent(this,AlarmScreen.class).putExtra("id",id).putExtra("title",title);
+   Intent open=new Intent(this,AlarmScreen.class).putExtra("id",id).putExtra("title",title)
+    .putExtra("details",details).putExtra("showText",showText).putExtra("speakText",speakText);
    open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
    PendingIntent openPi=PendingIntent.getActivity(this,id,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
    Intent stop=new Intent(this,StopReceiver.class).setAction(STOP)
@@ -235,7 +303,8 @@ public final class ReminderKit {
    PendingIntent stopPi=PendingIntent.getBroadcast(this,100000+id,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
    Notification n=new Notification.Builder(this,CHANNEL)
      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-     .setContentTitle("🔔 "+title).setContentText("Alarma sună până apeși OPREȘTE.")
+     .setContentTitle(showText?"🔔 "+title:"🔊 Memento vocal")
+     .setContentText(showText?(details.isEmpty()?"Alarma sună până apeși OPREȘTE.":details):"Ascultă mesajul vocal. Apasă OPREȘTE pentru liniște.")
      .setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PUBLIC)
      .setOngoing(true).setAutoCancel(false).setPriority(Notification.PRIORITY_HIGH)
      .setContentIntent(openPi).setFullScreenIntent(openPi,true)
@@ -258,6 +327,7 @@ public final class ReminderKit {
      player=MediaPlayer.create(this,u,null,backupAttr,0);if(player!=null){player.setLooping(true);player.start();}
     }catch(Exception ignored){}
    }
+   if(speakText&&!recentlyDismissed(this,id))beginSpeech(title,details);
    return START_NOT_STICKY;
   }
   @Override public void onDestroy(){
@@ -266,27 +336,102 @@ public final class ReminderKit {
    super.onDestroy();
   }
  }
+ /**
+  * Citim stilul global folosit de MainActivity.getPreferences(0), care utilizează
+  * numele local "MainActivity" ca fișier SharedPreferences.
+  */
+ static Typeface reminderTypeface(Context c){
+  android.content.SharedPreferences p=c.getSharedPreferences("MainActivity",0);
+  int idx=Math.max(0,Math.min(MainActivity.FONT_FAMILIES.length-1,p.getInt("global_font_style",0)));
+  return Typeface.create(MainActivity.FONT_FAMILIES[idx],MainActivity.FONT_STYLES[idx]);
+ }
+ static int reminderColor(Context c,boolean dark){
+  android.content.SharedPreferences p=c.getSharedPreferences("MainActivity",0);
+  int idx=Math.max(0,Math.min(MainActivity.NOTE_LIGHT.length-1,p.getInt("global_note_color",0)));
+  return dark?MainActivity.NOTE_DARK[idx]:MainActivity.NOTE_LIGHT[idx];
+ }
+ static float reminderFontSp(Context c){
+  return Math.max(12f,Math.min(40f,c.getSharedPreferences("MainActivity",0).getFloat("global_font_sp",19f)));
+ }
+ static int px(Context c,float dp){return (int)(dp*c.getResources().getDisplayMetrics().density+0.5f);}
+ // Aceeași carcasă bombată cu reflexii ca butoanele din aplicație.
+ static TextView glassStop(Context c,String text,Runnable action){
+  TextView stop=new TextView(c);stop.setText(text);stop.setGravity(Gravity.CENTER);
+  stop.setTextSize(21);stop.setTextColor(0xff54232D);stop.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+  stop.setPadding(px(c,15),px(c,22),px(c,15),px(c,22));
+  int radius=px(c,24);
+  GradientDrawable base=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+   new int[]{0xFAFFFFFF,0xF9FFDCE5,0xE8F7A5BD,0xE2CB7194,0xDDA64668});
+  base.setCornerRadius(radius);base.setStroke(px(c,2),0xF9FFFFFF);
+  GradientDrawable glint=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+   new int[]{0xBFFFFFFF,0x77FFFFFF,0x00FFFFFF});
+  glint.setCornerRadius(radius);
+  GradientDrawable outline=new GradientDrawable();outline.setCornerRadius(radius);
+  outline.setStroke(px(c,1),0xC385435A);outline.setColor(Color.TRANSPARENT);
+  LayerDrawable layers=new LayerDrawable(new Drawable[]{base,glint,outline});
+  layers.setLayerInset(1,px(c,9),px(c,4),px(c,9),px(c,18));
+  stop.setBackground(new RippleDrawable(ColorStateList.valueOf(0x3FFFFFFF),layers,null));
+  stop.setElevation(px(c,7));stop.setClickable(true);stop.setFocusable(true);
+  stop.setContentDescription(text);
+  stop.setOnClickListener(v->action.run());
+  return stop;
+ }
  public static class AlarmScreen extends Activity {
   @Override public void onCreate(Bundle b){
    super.onCreate(b);
-   getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED|WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON|WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+   getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED|
+    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON|WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
    if(Build.VERSION.SDK_INT>=27){setShowWhenLocked(true);setTurnScreenOn(true);}
    int id=getIntent().getIntExtra("id",0);
    JSONObject o=find(this,id);
-   String name=getIntent().getStringExtra("title");
-   if(name==null)name=o==null?"Memento":o.optString("title","Memento");
-   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setGravity(Gravity.CENTER);
-   root.setPadding(28,30,28,30);root.setBackgroundColor(0xff13223b);
-   TextView title=new TextView(this);title.setText("🔔\n"+name);title.setTextSize(28);title.setTextColor(Color.WHITE);title.setGravity(Gravity.CENTER);
-   root.addView(title);
-   TextView stop=new TextView(this);stop.setText("OPREȘTE ALARMA");stop.setTextSize(22);stop.setTextColor(Color.WHITE);
-   stop.setBackgroundColor(0xffb62d42);stop.setGravity(Gravity.CENTER);stop.setPadding(28,30,28,30);
-   LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,50,0,0);root.addView(stop,p);
-   stop.setOnClickListener(v->{
-    ReminderKit.silence(this,id); // Nu scade volumul: închide MediaPlayer și serviciul.
-    finish();
+   String name=o==null?getIntent().getStringExtra("title"):o.optString("title","Memento");
+   if(name==null||name.isEmpty())name="Memento";
+   String details=o==null?getIntent().getStringExtra("details"):o.optString("details","");
+   if(details==null)details="";
+   boolean showText=o==null?getIntent().getBooleanExtra("showText",true):o.optBoolean("showText",true);
+   boolean speakText=o==null?getIntent().getBooleanExtra("speakText",false):o.optBoolean("speakText",false);
+   boolean dark=getSharedPreferences("MainActivity",0).getBoolean("dark",false);
+   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
+   root.setGravity(Gravity.CENTER_HORIZONTAL);
+   root.setPadding(px(this,21),px(this,28),px(this,21),px(this,30));
+   root.setBackground(new ParchmentDrawable(dark));
+   TextView heading=new TextView(this);
+   heading.setText(showText?"🧠 Nu Uita — memento":"🔊 Nu Uita — mesaj vocal");
+   heading.setTextSize(20);heading.setGravity(Gravity.CENTER);
+   heading.setTypeface(Typeface.create("serif",Typeface.BOLD_ITALIC));
+   heading.setTextColor(dark?0xffF8E4C4:0xff493522);
+   root.addView(heading);
+   if(showText){
+    TextView msg=new TextView(this);
+    msg.setText(name);msg.setTextColor(reminderColor(this,dark));
+    msg.setTextSize(reminderFontSp(this));
+    msg.setTypeface(reminderTypeface(this));
+    msg.setGravity(Gravity.CENTER);
+    msg.setPadding(px(this,4),px(this,24),px(this,4),px(this,12));
+    root.addView(msg,new LinearLayout.LayoutParams(-1,-2));
+    if(!details.trim().isEmpty()){
+     TextView extra=new TextView(this);extra.setText(details);
+     extra.setTextColor(reminderColor(this,dark));
+     extra.setTextSize(reminderFontSp(this));
+     extra.setTypeface(reminderTypeface(this));
+     extra.setGravity(Gravity.CENTER);
+     root.addView(extra,new LinearLayout.LayoutParams(-1,-2));
+    }
+   }else{
+    TextView explanation=new TextView(this);
+    explanation.setText(speakText?"Mesajul tău este citit cu voce.":"Alarmă activă.");
+    explanation.setTextSize(17);explanation.setGravity(Gravity.CENTER);
+    explanation.setTextColor(dark?0xffF8E4C4:0xff493522);
+    root.addView(explanation);
+   }
+   TextView stop=glassStop(this,"🔇 OPREȘTE ALARMA",()->{
+    ReminderKit.silence(this,id);finish();
    });
-   setContentView(root);
+   LinearLayout.LayoutParams stopParams=new LinearLayout.LayoutParams(-1,-2);
+   stopParams.setMargins(0,px(this,28),0,px(this,10));
+   root.addView(stop,stopParams);
+   ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(root);
+   setContentView(scroll);
   }
  }
 }
