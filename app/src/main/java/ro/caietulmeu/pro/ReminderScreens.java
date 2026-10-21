@@ -9,6 +9,8 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.OpenableColumns;
 import android.speech.RecognizerIntent;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.graphics.Color;
 import android.view.*;
 import android.widget.*;
@@ -23,6 +25,9 @@ final class ReminderScreens {
  TextView dateLabel,timeLabel,soundLabel,repeatLabel,voiceFeedback;
  CheckBox textOption,voiceOption;
  boolean showText=true,speakText=false;
+ // Un memento dictat trebuie să fie văzut ȘI auzit fără niciun câmp tastat.
+ boolean voiceReminderMode=false,awaitingSpokenMessage=false,promptLaunching=false;
+ TextToSpeech voiceQuestion;
  long at;
  String sound="",soundName="Sunetul implicit al telefonului",repeat="O singură dată";
  JSONObject editing;
@@ -159,7 +164,8 @@ final class ReminderScreens {
   at=c.getTimeInMillis();refresh();
  }
  void form(JSONObject existing,String initialTitle,String initialBody){
-  stopPreview();enter();editing=existing;
+  stopPreview();closeVoiceQuestion();voiceReminderMode=false;
+  awaitingSpokenMessage=false;promptLaunching=false;enter();editing=existing;
   Calendar selected=Calendar.getInstance();
   if(existing!=null){at=existing.optLong("at");repeat=existing.optString("repeat","O singură dată");}
   else{selected.add(Calendar.HOUR_OF_DAY,1);selected.set(Calendar.MINUTE,0);selected.set(Calendar.SECOND,0);at=selected.getTimeInMillis();repeat="O singură dată";}
@@ -223,12 +229,20 @@ final class ReminderScreens {
   commandField=a.field("Comandă: Amintește-mi pe 30 octombrie la ora 12:46 să...",true);
   commandField.setMinLines(2);commandField.setMaxLines(3);content.addView(commandField);
   voiceFeedback=new TextView(a);voiceFeedback.setTextColor(a.fg());voiceFeedback.setPadding(12,8,12,8);
-  voiceFeedback.setText("Spune data și ora prin voce. Dacă le înțeleg, salvez automat mementoul.");content.addView(voiceFeedback);
+  voiceFeedback.setText("Spune data, ora și mesajul. Pentru mementouri vocale, mesajul va fi afișat ȘI citit la ora stabilită.");
+  content.addView(voiceFeedback);
   a.section(content,"🎙️ Creează prin voce sau text");
   LinearLayout speak=new LinearLayout(a);speak.setOrientation(LinearLayout.HORIZONTAL);content.addView(speak);
   a.tile("🎙️ Spune comanda",speak,()->dictate());
   a.tile("✅ Execută textul",speak,()->{
    if(!processCommand(commandField.getText().toString()))Toast.makeText(a,"Nu am înțeles data și ora. Corectează textul de mai sus.",Toast.LENGTH_LONG).show();
+  });
+  a.button("🎤 Spune doar mesajul (după data și ora dictate)",content,()->{
+   if(!awaitingSpokenMessage){
+    Toast.makeText(a,"Dictează mai întâi data și ora prin «Spune comanda».",Toast.LENGTH_LONG).show();
+    return;
+   }
+   closeVoiceQuestion();dictate();
   });
   a.section(content,"📅 Programare");
   LinearLayout when=new LinearLayout(a);when.setOrientation(LinearLayout.HORIZONTAL);content.addView(when);
@@ -411,13 +425,72 @@ final class ReminderScreens {
    return false;
   }
  }
+ void closeVoiceQuestion(){
+  TextToSpeech q=voiceQuestion;voiceQuestion=null;
+  if(q!=null){
+   try{q.stop();}catch(Exception ignored){}
+   try{q.shutdown();}catch(Exception ignored){}
+  }
+ }
+ void launchMessageRecognition(){
+  if(!awaitingSpokenMessage||promptLaunching)return;
+  promptLaunching=true;
+  closeVoiceQuestion();
+  a.root.postDelayed(()->{
+   promptLaunching=false;
+   if(awaitingSpokenMessage)dictate();
+  },350);
+ }
+ void requestMessageByVoice(){
+  awaitingSpokenMessage=true;voiceReminderMode=true;
+  if(voiceFeedback!=null)voiceFeedback.setText(
+   "📅 Am înțeles: "+date(at)+", "+time(at)+
+   "\\n🎙️ Spune acum CE trebuie să îți amintesc. Nu e nevoie să tastezi nimic.");
+  if(commandField!=null)commandField.setText("");
+  closeVoiceQuestion();
+  try{
+   voiceQuestion=new TextToSpeech(a.getApplicationContext(),status->a.runOnUiThread(()->{
+    TextToSpeech engine=voiceQuestion;
+    if(!awaitingSpokenMessage||engine==null)return;
+    if(status!=TextToSpeech.SUCCESS){
+     Toast.makeText(a,"Spune mesajul când apare microfonul.",Toast.LENGTH_SHORT).show();
+     launchMessageRecognition();return;
+    }
+    int lang=engine.setLanguage(new Locale("ro","RO"));
+    if(lang==TextToSpeech.LANG_MISSING_DATA||lang==TextToSpeech.LANG_NOT_SUPPORTED){
+     launchMessageRecognition();return;
+    }
+    engine.setOnUtteranceProgressListener(new UtteranceProgressListener(){
+     @Override public void onStart(String utteranceId){}
+     @Override public void onDone(String utteranceId){a.runOnUiThread(()->launchMessageRecognition());}
+     @Override public void onError(String utteranceId){a.runOnUiThread(()->launchMessageRecognition());}
+    });
+    int ok=engine.speak("Ce mesaj vrei să îți amintesc?",TextToSpeech.QUEUE_FLUSH,null,"nuuita-ask");
+    if(ok==TextToSpeech.ERROR)launchMessageRecognition();
+   }));
+  }catch(Exception ex){
+   android.util.Log.w("NuUitaVoice","Întrebarea vocală nu a pornit",ex);
+   launchMessageRecognition();
+  }
+ }
  void dictate(){
+  if(editing==null && !voiceReminderMode && !awaitingSpokenMessage){
+   // Orice memento creat prin recunoașterea vocii primește ambele ieșiri.
+   voiceReminderMode=true;
+   showText=true;speakText=true;
+   if(textOption!=null)textOption.setChecked(true);
+   if(voiceOption!=null)voiceOption.setChecked(true);
+  }
   Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
   i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
   i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ro-RO");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ro-RO");
   i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
-  i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Exemplu: Memento pe 30 octombrie la ora 12:46 să sun medicul. Salvează.");
-  try{a.startActivityForResult(i,78);}catch(Exception e){Toast.makeText(a,"Dictarea vocală nu este disponibilă",Toast.LENGTH_LONG).show();}
+  i.putExtra(RecognizerIntent.EXTRA_PROMPT,awaitingSpokenMessage?
+   "Spune numai mesajul care trebuie afișat și citit la ora aleasă.":
+   "Exemplu: Memento mâine la ora 11 să beau apă.");
+  try{a.startActivityForResult(i,78);}catch(Exception e){
+   Toast.makeText(a,"Dictarea vocală nu este disponibilă. Folosește din nou butonul microfon.",Toast.LENGTH_LONG).show();
+  }
  }
 
  // Romanian spoken numbers are often transcribed as words, including "patruzeci și șase".
@@ -521,13 +594,29 @@ final class ReminderScreens {
   if(data==null||title==null){Toast.makeText(a,"Recunoașterea vocală nu a întors rezultate.",Toast.LENGTH_LONG).show();return;}
   ArrayList<String> matches=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
   if(matches==null||matches.isEmpty()){Toast.makeText(a,"Nu am primit text de la microfon.",Toast.LENGTH_LONG).show();return;}
-  // Android poate propune mai multe transcrieri: folosim prima cu dată+oră înțelese.
+  if(awaitingSpokenMessage){
+   String message=RomanianReminderParser.cleanDictatedMessage(matches.get(0));
+   if(message.isEmpty()){
+    if(voiceFeedback!=null)voiceFeedback.setText("🎙️ N-am primit un mesaj clar. Apasă «Spune doar mesajul» și repetă.");
+    Toast.makeText(a,"Spune propoziția care trebuie citită, de exemplu «să cumpăr pâine».",Toast.LENGTH_LONG).show();
+    return;
+   }
+   awaitingSpokenMessage=false;
+   title.setText(message);
+   description.setText(message);
+   if(commandField!=null)commandField.setText("🎙️ Mesaj dictat: "+message);
+   if(voiceFeedback!=null)voiceFeedback.setText("✅ Mesaj preluat: «"+message+"». Va fi afișat și rostit.");
+   // Singurul memento este salvat cu data/ora deja recunoscută.
+   save(true);
+   return;
+  }
+  // Android poate propune mai multe transcrieri: prima cu dată+oră valide.
   String best=matches.get(0).trim();
   for(String candidate:matches){
    RomanianReminderParser.Result p=RomanianReminderParser.parse(candidate,System.currentTimeMillis(),TimeZone.getDefault());
    if(p.valid){processCommand(candidate);return;}
   }
-  processCommand(best); // Afișează clar motivul, NU salvează o dată inventată.
+  processCommand(best);
  }
  boolean processCommand(String spoken){
   if(spoken==null||spoken.trim().isEmpty())return false;
@@ -542,8 +631,19 @@ final class ReminderScreens {
   if(!p.details.isEmpty()){
    title.setText(p.title);
    description.setText(p.details);
-  }else if(title.getText().toString().trim().isEmpty())title.setText("Memento");
+  }
   refresh();
+  String usefulMessage=RomanianReminderParser.speechText(
+   title.getText().toString(),description.getText().toString());
+  if(usefulMessage.isEmpty()){
+   // Niciun memento gol / «Memento Memento»: cerem al doilea mesaj vocal.
+   if(voiceReminderMode)requestMessageByVoice();
+   else{
+    if(voiceFeedback!=null)voiceFeedback.setText("📅 Am înțeles data și ora. Adaugă mesajul și salvează.");
+    Toast.makeText(a,"Lipsește mesajul mementoului. Spune și ce trebuie să îți amintesc.",Toast.LENGTH_LONG).show();
+   }
+   return false;
+  }
   String spokenMessage=RomanianReminderParser.speechText(
    title.getText().toString(),description.getText().toString());
   if(voiceFeedback!=null)voiceFeedback.setText(
@@ -551,8 +651,12 @@ final class ReminderScreens {
    (spokenMessage.isEmpty()?
     "⚠️ Nu ai dictat ce să citesc. Adaugă mesajul în TITLU sau DETALII.":
     "🗣️ Mesajul care va fi citit: "+spokenMessage));
-  // Salvăm automat, DAR rămânem în formular pentru bifarea ulterioară a citirii.
-  // Noua bifă persistă imediat și nu se creează un al doilea memento.
+  // Memento dictat: ambele moduri implicit, fără tastare sau bifări.
+  if(voiceReminderMode){
+   showText=true;speakText=true;
+   if(textOption!=null)textOption.setChecked(true);
+   if(voiceOption!=null)voiceOption.setChecked(true);
+  }
   return save(true);
  }
 
