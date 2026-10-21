@@ -252,10 +252,17 @@ final class ReminderScreens {
    title.getText().toString().trim().isEmpty()?"Probă memento":title.getText().toString().trim(),
    description.getText().toString()));
   a.tile("🔇 Oprește orice sunet",realTest,()->ReminderKit.stopFromUi(a));
-  a.button("🗣️ TEST DOAR VOCEA ROMÂNĂ (fără melodie)",content,()->{
-   String words=title.getText().toString().trim();
-   ReminderKit.testVoice(a,words.isEmpty()?"Nu uita să bei apă":words,
-    description.getText().toString());
+  a.button("🗣️ TEST: CITEȘTE MESAJUL MEU (fără melodie)",content,()->{
+   String heading=title.getText().toString().trim();
+   String message=description.getText().toString().trim();
+   String spoken=RomanianReminderParser.speechText(heading,message);
+   if(spoken.isEmpty()){
+    Toast.makeText(a,"Nu există un mesaj de citit! Scrie în TITLU sau DETALII ce dorești să auzi.",Toast.LENGTH_LONG).show();
+    if(voiceFeedback!=null)voiceFeedback.setText("❌ Mesajul este gol. «Memento» este doar un titlu generic. Introdu mesajul tău.");
+    return;
+   }
+   if(voiceFeedback!=null)voiceFeedback.setText("🗣️ Voi rosti exact: "+spoken);
+   ReminderKit.testVoice(a,heading,message);
   });
   a.section(content,"✅ Confirmă mementoul");
   LinearLayout action=new LinearLayout(a);action.setOrientation(LinearLayout.VERTICAL);content.addView(action);
@@ -386,7 +393,11 @@ final class ReminderScreens {
     +name+" — "+date(at)+", "+time(at);
    if(stayOnForm){
     if(voiceFeedback!=null)voiceFeedback.setText(lastSavedLabel+
-     "\nPoți bifa acum «Citește mesajul vocal»: se salvează imediat pentru acest memento.");
+     "\nPoți bifa acum «Citește mesajul vocal»: se salvează imediat pentru acest memento."+
+     "\n🗣️ Text pentru citire: "+
+     (RomanianReminderParser.speechText(name,description.getText().toString()).isEmpty()?
+       "(LIPSEȘTE — adaugă text în titlu sau detalii și salvează din nou)":
+       RomanianReminderParser.speechText(name,description.getText().toString())));
     Toast.makeText(a,"Memento salvat. Poți schimba acum bifele scris/vocal.",Toast.LENGTH_LONG).show();
    }else{
     list();
@@ -533,7 +544,13 @@ final class ReminderScreens {
    description.setText(p.details);
   }else if(title.getText().toString().trim().isEmpty())title.setText("Memento");
   refresh();
-  if(voiceFeedback!=null)voiceFeedback.setText("✅ Am înțeles: "+date(at)+", "+time(at)+". Salvez automat.");
+  String spokenMessage=RomanianReminderParser.speechText(
+   title.getText().toString(),description.getText().toString());
+  if(voiceFeedback!=null)voiceFeedback.setText(
+   "✅ Am înțeles: "+date(at)+", "+time(at)+". Salvez automat.\n"+
+   (spokenMessage.isEmpty()?
+    "⚠️ Nu ai dictat ce să citesc. Adaugă mesajul în TITLU sau DETALII.":
+    "🗣️ Mesajul care va fi citit: "+spokenMessage));
   // Salvăm automat, DAR rămânem în formular pentru bifarea ulterioară a citirii.
   // Noua bifă persistă imediat și nu se creează un al doilea memento.
   return save(true);
