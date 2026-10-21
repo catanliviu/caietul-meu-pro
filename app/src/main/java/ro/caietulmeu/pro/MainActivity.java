@@ -48,7 +48,8 @@ public class MainActivity extends Activity {
  void home(){
   current=-1;remindersActive=false;if(reminders!=null)reminders.stopPreview();root=vertical();LinearLayout row=line(root);
   button("➕ NOTIȚĂ NOUĂ",row,()->editor(-1));
-  button("🔔 MEMENTO",row,()->mementouri().list());
+  button("🧠 NU UITA",row,()->mementouri().list());
+  button("🔇 OPREȘTE SUNETUL",row,()->ReminderKit.stopFromUi(this));
   button("🎙️ MEMENTO VOCAL",row,()->{mementouri().form(null,"","");mementouri().dictate();});
   button("📅 CALENDAR",row,()->mementouri().showCalendar());
   button("🌙 / ☀️",row,()->{dark=!dark;persist();home();});
