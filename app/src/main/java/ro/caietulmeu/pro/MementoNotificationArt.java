@@ -28,7 +28,7 @@ final class MementoNotificationArt {
    .setMaxLines(count).build();
  }
  static Bitmap render(Context c,String title,String details,boolean expanded){
-  boolean dark=c.getSharedPreferences("MainActivity",0).getBoolean("dark",false);
+  boolean dark=ReminderKit.mainEditorPrefs(c).getBoolean("dark",false);
   int width=Math.min(dp(c,390),Math.max(dp(c,230),
    c.getResources().getDisplayMetrics().widthPixels-dp(c,72)));
   int pad=dp(c,12),contentWidth=width-pad*2;
