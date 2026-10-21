@@ -68,7 +68,9 @@ public class MainActivity extends Activity {
    for(int i=notes.length()-1;i>=0;i--){JSONObject o=notes.optJSONObject(i);if(o==null)continue;
     String t=o.optString("title","Fără titlu"),b=o.optString("body","");
     if(!(t+" "+b).toLowerCase(Locale.ROOT).contains(q))continue;
-    final int index=i;button("📝 "+t+"\n"+b.substring(0,Math.min(75,b.length())),list,()->editor(index));
+    final int index=i;
+    TextView noteRow=button("📝 "+t+"\n"+b.substring(0,Math.min(75,b.length())),list,()->editor(index));
+    noteRow.setTextSize(fontSizeSp());
    }
   };
   search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){render.run();}public void afterTextChanged(Editable e){}});
