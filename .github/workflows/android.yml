@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,7 +22,20 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Testează interpretarea vocală fără Android
+        run: |
+          mkdir -p /tmp/reminder-test
+          javac -encoding UTF-8 -d /tmp/reminder-test app/src/main/java/ro/caietulmeu/pro/RomanianReminderParser.java app/src/test/java/ro/caietulmeu/pro/ParserSmokeTest.java
+          java -cp /tmp/reminder-test ro.caietulmeu.pro.ParserSmokeTest
       - run: gradle assembleDebug --no-daemon
+      - name: Verifică semnătura și compatibilitatea APK
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 26 "$APK"
+          unzip -t "$APK"
       - uses: actions/upload-artifact@v4
         with:
           name: CaietulMeuPro2-APK
