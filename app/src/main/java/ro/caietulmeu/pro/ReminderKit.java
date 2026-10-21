@@ -57,12 +57,12 @@ public final class ReminderKit {
   for(int i=0;i<a.length();i++) { JSONObject o=a.optJSONObject(i); if(o!=null && o.optInt("id")==id) return o; }
   return null;
  }
- static void write(Context c,JSONArray a) { c.getSharedPreferences(STORE,0).edit().putString(KEY,a.toString()).apply(); }
- static void save(Context c,JSONObject o) {
+ static boolean write(Context c,JSONArray a) { return c.getSharedPreferences(STORE,0).edit().putString(KEY,a.toString()).commit(); }
+ static boolean save(Context c,JSONObject o) {
   JSONArray a=all(c),b=new JSONArray();
   int id=o.optInt("id");
   for(int i=0;i<a.length();i++){ JSONObject e=a.optJSONObject(i); if(e!=null && e.optInt("id")!=id)b.put(e); }
-  b.put(o);write(c,b);
+  b.put(o);return write(c,b);
  }
  static void delete(Context c,int id) {
   cancel(c,id);JSONArray a=all(c),b=new JSONArray();
