@@ -126,6 +126,14 @@ final class RomanianReminderParser {
   }
   return "";
  }
+ // Când recunoaștem al doilea enunț, acesta ESTE mesajul, nu o altă comandă.
+ static String cleanDictatedMessage(String spoken){
+  if(spoken==null)return "";
+  String text=spoken.trim();
+  text=text.replaceAll("(?iu)^\\s*(?:mesajul\\s+este\\s+|amintește-mi\\s+(?:să\\s+)?|aminteste-mi\\s+(?:sa\\s+)?)","");
+  text=tidyMessage(text);
+  return speechText(text,"").isEmpty()?"":text;
+ }
  // Exact mesajul transmis către Text-to-Speech (fără «Memento. Memento»).
  static String speechText(String title,String details){
   String t=title==null?"":title.trim();
