@@ -247,8 +247,15 @@ public final class ReminderKit {
   }
   void beginSpeech(String title,String details){
    final int expectedId=id;
-   final String words="Memento. "+title+
-    (details==null||details.trim().isEmpty()?"":". "+details.trim());
+   final String words=RomanianReminderParser.speechText(title,details);
+   if(words.isEmpty()){
+    voiceNotice("Nu există niciun mesaj de citit. Scrie ce vrei să îți amintesc în titlu sau în detalii.");
+    if(voiceOnlyTest)speechHandler.postDelayed(()->{
+     if(active==this&&id==expectedId)silence(this,expectedId);
+    },2500);
+    return;
+   }
+   android.util.Log.i("NuUitaVoice","Voi rosti mesajul (caractere): "+words.length());
    try{
     speech=new TextToSpeech(getApplicationContext(),init->speechHandler.post(()->{
      TextToSpeech engine=speech;
