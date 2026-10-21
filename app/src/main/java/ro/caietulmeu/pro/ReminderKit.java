@@ -238,6 +238,7 @@ public final class ReminderKit {
   MediaPlayer player;
   TextToSpeech speech;
   boolean voiceOnlyTest=false;
+  volatile boolean speechStarted=false,speechFinished=false;
   final Handler speechHandler=new Handler(Looper.getMainLooper());
   int id;
   @Override public void onCreate(){super.onCreate();active=this;}
@@ -249,75 +250,77 @@ public final class ReminderKit {
    final int expectedId=id;
    final String words=RomanianReminderParser.speechText(title,details);
    if(words.isEmpty()){
-    voiceNotice("Nu există niciun mesaj de citit. Scrie ce vrei să îți amintesc în titlu sau în detalii.");
-    if(voiceOnlyTest)speechHandler.postDelayed(()->{
-     if(active==this&&id==expectedId)silence(this,expectedId);
-    },2500);
+    voiceNotice("Mementoul nu conține un mesaj de citit.");
+    restoreMusic(expectedId);
     return;
    }
-   android.util.Log.i("NuUitaVoice","Voi rosti mesajul (caractere): "+words.length());
+   speechStarted=false;speechFinished=false;
+   android.util.Log.i("NuUitaVoice","Mesaj complet: "+words.length()+" caractere");
    try{
     speech=new TextToSpeech(getApplicationContext(),init->speechHandler.post(()->{
      TextToSpeech engine=speech;
      if(active!=this||id!=expectedId||recentlyDismissed(this,expectedId)||engine==null)return;
      if(init!=TextToSpeech.SUCCESS){
-      voiceNotice("Motorul de citire a returnat eroare de inițializare: "+init);
-      return;
+      speechFinished=true;voiceNotice("Inițializare TTS eșuată.");restoreMusic(expectedId);return;
      }
      int lang=engine.setLanguage(new Locale("ro","RO"));
-     if(lang==TextToSpeech.LANG_MISSING_DATA||lang==TextToSpeech.LANG_NOT_SUPPORTED){
+     if(lang==TextToSpeech.LANG_MISSING_DATA||lang==TextToSpeech.LANG_NOT_SUPPORTED)
       lang=engine.setLanguage(new Locale("ro"));
-     }
      if(lang==TextToSpeech.LANG_MISSING_DATA||lang==TextToSpeech.LANG_NOT_SUPPORTED){
-      voiceNotice("Motorul vocal nu acceptă româna în această aplicație. Verifică limba în Text-to-Speech.");
-      return;
+      speechFinished=true;voiceNotice("Motorul nu acceptă voce română.");restoreMusic(expectedId);return;
      }
-     // Folosim fluxul audio obișnuit al motorului TTS, ca în proba Samsung;
-     // alarma este complet mută cât timp vocea citește mesajul.
      engine.setSpeechRate(1f);
      engine.setOnUtteranceProgressListener(new UtteranceProgressListener(){
       @Override public void onStart(String utteranceId){
-       android.util.Log.i("NuUitaVoice","Citirea a început: "+utteranceId);
+       speechStarted=true;
+       speechHandler.post(()->{
+        if(active!=SoundService.this||id!=expectedId)return;
+        MediaPlayer music=player;
+        if(music!=null)try{if(music.isPlaying())music.pause();}catch(Exception ignored){}
+       });
       }
       @Override public void onDone(String utteranceId){
+       speechFinished=true;
        if(voiceOnlyTest)speechHandler.post(()->{
         if(active==SoundService.this&&id==expectedId)silence(SoundService.this,expectedId);
        });
        else restoreMusic(expectedId);
       }
       @Override public void onError(String utteranceId){
-       speechHandler.post(()->voiceNotice("Motorul nu a putut reda vocea."));
-       restoreMusic(expectedId);
+       speechFinished=true;voiceNotice("Eroare citire TTS");restoreMusic(expectedId);
       }
      });
-     MediaPlayer current=player;
-     if(current!=null)try{current.setVolume(0f,0f);}catch(Exception ignored){}
-     int queued;
-     try{queued=engine.speak(words,TextToSpeech.QUEUE_FLUSH,null,"nuuita-"+expectedId);}
+     int result;
+     try{result=engine.speak(words,TextToSpeech.QUEUE_FLUSH,null,"nuuita-"+expectedId);}
      catch(Exception e){
-      queued=TextToSpeech.ERROR;
-      android.util.Log.e("NuUitaVoice","Eroare la citirea mementoului",e);
+      result=TextToSpeech.ERROR;android.util.Log.e("NuUitaVoice","Eroare speak",e);
      }
-     if(queued==TextToSpeech.ERROR){
-      voiceNotice("Nu am putut porni vocea; verifică volumul media și motorul Text-to-Speech.");
-      restoreMusic(expectedId);
-     }else{
-      voiceNotice("🔊 Cererea vocală a fost trimisă către motorul românesc.");
+     if(result==TextToSpeech.ERROR){
+      speechFinished=true;voiceNotice("Redarea vocală a eșuat.");restoreMusic(expectedId);
      }
     }));
    }catch(Exception e){
-    android.util.Log.e("NuUitaVoice","Constructor TTS a eșuat",e);
-    voiceNotice("Nu pot porni motorul vocal: "+e.getClass().getSimpleName());
+    speechFinished=true;android.util.Log.e("NuUitaVoice","TTS indisponibil",e);
+    restoreMusic(expectedId);
    }
+   // Fallback numai dacă sinteza nu a început: alarma trebuie să fie audibilă.
+   speechHandler.postDelayed(()->{
+    if(active==this&&id==expectedId&&!speechStarted&&!speechFinished
+     &&!recentlyDismissed(this,expectedId))restoreMusic(expectedId);
+   },12000);
   }
   void restoreMusic(int expectedId){
    speechHandler.post(()->{
-    if(active!=this||id!=expectedId)return;
-    MediaPlayer current=player;
-    if(current!=null)try{current.setVolume(1f,1f);}catch(Exception ignored){}
+    if(active!=this||id!=expectedId||recentlyDismissed(this,expectedId))return;
+    MediaPlayer music=player;
+    if(music!=null&&!voiceOnlyTest)try{
+     music.setVolume(1f,1f);
+     if(!music.isPlaying())music.start();
+    }catch(Exception e){android.util.Log.w("NuUitaVoice","Melodia nu a pornit",e);}
    });
   }
   synchronized void stopAudio(){
+   speechStarted=false;speechFinished=false;
    TextToSpeech oldSpeech=speech;speech=null;
    if(oldSpeech!=null){
     try{oldSpeech.stop();}catch(Exception ignored){}
@@ -398,13 +401,15 @@ public final class ReminderKit {
     AudioAttributes attr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
     player=MediaPlayer.create(this,uri,null,attr,0);
     if(player==null)throw new IllegalStateException("Nu există sunetul ales");
-    player.setLooping(true);player.start();
+    player.setLooping(true);
+    if(!speakText)player.start(); // citește mesajul înainte să sune melodia.
    }catch(Exception e){
     android.util.Log.w("Memento","Fallback alarm sound",e);
     try{
      Uri u=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
      AudioAttributes backupAttr=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
-     player=MediaPlayer.create(this,u,null,backupAttr,0);if(player!=null){player.setLooping(true);player.start();}
+     player=MediaPlayer.create(this,u,null,backupAttr,0);
+     if(player!=null){player.setLooping(true);if(!speakText)player.start();}
     }catch(Exception ignored){}
    }
    if((speakText||voiceOnlyTest)&&!recentlyDismissed(this,id))beginSpeech(title,details);
