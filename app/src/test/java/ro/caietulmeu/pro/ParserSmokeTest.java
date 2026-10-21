@@ -60,6 +60,13 @@ public final class ParserSmokeTest {
   spoken("Nu uita să bei apă","Nu uita să bei apă","Nu uita să bei apă");
   spoken("Sună medicul","La ora programată","Sună medicul. La ora programată");
   spoken("Memento","să beau apă","să beau apă");
+  message("Vreau să faci un memento pe 30 octombrie la ora 12:46 să cumpăr pâine și să iau lapte","cumpăr pâine și să iau lapte");
+  message("Amintește-mi mâine la ora 11 să îi spun lui Carmen că ajung târziu și să iau apă","îi spun lui Carmen că ajung târziu și să iau apă");
+  message("Memento peste două minute să închid aragazul și să verific ușa","închid aragazul și să verific ușa");
+  message("Memento mâine la ora 11 să nu uit să cumpăr și să plătesc","nu uit să cumpăr și să plătesc");
+  String longText="Trebuie să sun medicul pentru programarea la consultație și să întreb despre analize și să cumpăr medicamente după aceea";
+  message("Memento pe 30 octombrie la ora 12:46 să "+longText,""+longText);
+  spoken(longText.substring(0,62)+"…",longText,longText);
   String voiceMessage=RomanianReminderParser.cleanDictatedMessage("Nu uita să iei medicamentele, salvează");
   if(!"Nu uita să iei medicamentele".equals(voiceMessage))
    throw new AssertionError("Eroare mesaj dictat separat: "+voiceMessage);
