@@ -26,6 +26,7 @@ final class ReminderScreens {
  JSONObject editing;
  Calendar calendar=Calendar.getInstance();
  Ringtone preview;
+ String lastSavedLabel="";
  static Ringtone sharedPreview;
  final SimpleDateFormat dateFormat=new SimpleDateFormat("EEEE, dd MMMM yyyy",new Locale("ro","RO"));
  final SimpleDateFormat timeFormat=new SimpleDateFormat("HH:mm",Locale.ROOT);
@@ -47,6 +48,7 @@ final class ReminderScreens {
   a.button("➕ Memento nou",nav,()->form(null,"",""));
   a.button("🎙️ Memento vocal",nav,()->{form(null,"","");dictate();});
   navigation("🔔 Mementourile mele");
+  if(!lastSavedLabel.isEmpty())navigation(lastSavedLabel);
   ScrollView scroll=new ScrollView(a);LinearLayout items=new LinearLayout(a);items.setOrientation(1);scroll.addView(items);a.root.addView(scroll);
   JSONArray data=ReminderKit.all(a);
   ArrayList<JSONObject> sorted=new ArrayList<>();
@@ -232,21 +234,35 @@ final class ReminderScreens {
    else Toast.makeText(a,"Sunet indisponibil",Toast.LENGTH_SHORT).show();
   }catch(Exception e){Toast.makeText(a,"Nu pot reda acest sunet",Toast.LENGTH_SHORT).show();}
  }
- void save(){
+ boolean save(){
   String name=title.getText().toString().trim();
-  if(name.isEmpty()){title.setError("Scrie motivul mementoului");return;}
-  if(at<=System.currentTimeMillis()){Toast.makeText(a,"Alege o dată și o oră din viitor.",Toast.LENGTH_LONG).show();return;}
+  if(name.isEmpty()){title.setError("Spune ce trebuie să îți amintești");return false;}
+  if(at<=System.currentTimeMillis()){Toast.makeText(a,"Alege o dată și o oră din viitor.",Toast.LENGTH_LONG).show();return false;}
   try{
-   JSONObject o=editing==null?new JSONObject():editing;
+   JSONObject o=editing==null?new JSONObject():new JSONObject(editing.toString());
    if(editing==null)o.put("id",(int)(System.currentTimeMillis()&0x7fffffff));
    o.put("title",name);o.put("details",description.getText().toString());
    o.put("at",at);o.put("repeat",repeat);o.put("sound",sound);o.put("soundName",soundName);
-   int id=o.optInt("id");ReminderKit.cancel(a,id);ReminderKit.save(a,o);
+   int id=o.optInt("id");
+   // Persistăm sincron, verificăm abia apoi programarea exactă a alarmei.
+   if(!ReminderKit.save(a,o)||ReminderKit.find(a,id)==null){
+    Toast.makeText(a,"Nu am putut salva mementoul în memoria telefonului.",Toast.LENGTH_LONG).show();
+    return false;
+   }
+   ReminderKit.cancel(a,id);
    boolean scheduled=ReminderKit.schedule(a,o);
-   stopPreview();list();
-   Toast.makeText(a,scheduled?"✓ Memento și alarmă programate":"Memento salvat. Acordă permisiunea de alarmă pentru a suna!",Toast.LENGTH_LONG).show();
-   ReminderKit.askPermission(a);
-  }catch(Exception e){Toast.makeText(a,"Eroare la salvarea mementoului",Toast.LENGTH_LONG).show();}
+   stopPreview();
+   lastSavedLabel=(scheduled?"✅ SALVAT ȘI PROGRAMAT: ":"✅ SALVAT (alarma necesită permisiune): ")
+    +name+" — "+date(at)+", "+time(at);
+   list();
+   Toast.makeText(a,lastSavedLabel,Toast.LENGTH_LONG).show();
+   if(!scheduled)ReminderKit.askPermission(a);
+   return true;
+  }catch(Exception e){
+   android.util.Log.e("Memento","Eroare la salvare",e);
+   Toast.makeText(a,"Eroare la salvare: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
+   return false;
+  }
  }
  void dictate(){
   Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
@@ -355,103 +371,36 @@ final class ReminderScreens {
   return shortTitle(s);
  }
  void onVoice(Intent data){
-  if(data==null||title==null)return;
+  if(data==null||title==null){Toast.makeText(a,"Recunoașterea vocală nu a întors rezultate.",Toast.LENGTH_LONG).show();return;}
   ArrayList<String> matches=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-  if(matches==null||matches.isEmpty()){
-   Toast.makeText(a,"Nu am primit text de la microfon.",Toast.LENGTH_LONG).show();return;
+  if(matches==null||matches.isEmpty()){Toast.makeText(a,"Nu am primit text de la microfon.",Toast.LENGTH_LONG).show();return;}
+  // Android poate propune mai multe transcrieri: folosim prima cu dată+oră înțelese.
+  String best=matches.get(0).trim();
+  for(String candidate:matches){
+   RomanianReminderParser.Result p=RomanianReminderParser.parse(candidate,System.currentTimeMillis(),TimeZone.getDefault());
+   if(p.valid){processCommand(candidate);return;}
   }
-  for(String option:matches)if(processCommand(option.trim()))return;
-  if(commandField!=null)commandField.setText(matches.get(0).trim());
-  Toast.makeText(a,"Nu am înțeles data sau ora. Verifică transcrierea și apasă «Execută textul».",Toast.LENGTH_LONG).show();
+  processCommand(best); // Afișează clar motivul, NU salvează o dată inventată.
  }
  boolean processCommand(String spoken){
   if(spoken==null||spoken.trim().isEmpty())return false;
   if(commandField!=null)commandField.setText(spoken);
-  if(voiceFeedback!=null)voiceFeedback.setText("Am auzit: "+spoken);
-  String s=numericSpeech(normalized(spoken));
-  Calendar now=Calendar.getInstance();
-  int hour=0,minute=0;
-  boolean foundTime=false;
-  Matcher tm=Pattern.compile("\\b(?:la\\s+ora|ora|orele|la)\\s+(\\d{1,2})(?:\\s*(?:[:.,]|si)\\s*(\\d{1,2})|\\s+(\\d{2}))?\\b").matcher(s);
-  if(tm.find()){
-   hour=Integer.parseInt(tm.group(1));
-   minute=tm.group(2)!=null?Integer.parseInt(tm.group(2)):tm.group(3)!=null?Integer.parseInt(tm.group(3)):0;
-   foundTime=hour<=23&&minute<=59;
+  RomanianReminderParser.Result p=RomanianReminderParser.parse(spoken,System.currentTimeMillis(),TimeZone.getDefault());
+  if(!p.valid){
+   if(voiceFeedback!=null)voiceFeedback.setText("🎤 Am auzit: "+spoken+"\n❌ "+p.error);
+   Toast.makeText(a,p.error,Toast.LENGTH_LONG).show();
+   return false;
   }
-
-  // Year, month and day may arrive in any spoken order.
-  boolean nextYear=Pattern.compile("\\b(?:anul\\s+(?:viitor|urmator)|la\\s+anul)\\b").matcher(s).find();
-  boolean thisYear=Pattern.compile("\\b(?:anul\\s+(?:acesta|asta|curent))\\b").matcher(s).find();
-  Matcher absoluteYear=Pattern.compile("\\b(?:(?:in\\s+)?anul\\s+|in\\s+)(20\\d{2}|21\\d{2})\\b").matcher(s);
-  Integer requestedYear=nextYear?now.get(Calendar.YEAR)+1:thisYear?now.get(Calendar.YEAR):null;
-  if(absoluteYear.find())requestedYear=Integer.parseInt(absoluteYear.group(1));
-
-  String[] months={"ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"};
-  String monthNames=String.join("|",months);
-  Matcher monthMatch=Pattern.compile("\\b("+monthNames+")\\b").matcher(s);
-  int requestedMonth=monthMatch.find()?Arrays.asList(months).indexOf(monthMatch.group(1))+1:-1;
-
-  Matcher numeric=Pattern.compile("\\b(\\d{1,2})[./-](\\d{1,2})(?:[./-](\\d{4}))?\\b").matcher(s);
-  Matcher named=Pattern.compile("\\b(\\d{1,2})\\s+("+monthNames+")(?:\\s+(\\d{4}))?\\b").matcher(s);
-  Matcher plain=Pattern.compile("\\b(?:(?:in\\s+)?(?:data|ziua)\\s+(?:de\\s+)?|pe\\s+)(\\d{1,2})\\b").matcher(s);
-  Calendar chosen=null;
-  if(foundTime){
-   if(s.contains("poimaine")||s.contains("maine")||Pattern.compile("\\b(?:azi|astazi)\\b").matcher(s).find()){
-    int plus=s.contains("poimaine")?2:s.contains("maine")?1:0;
-    Calendar d=(Calendar)now.clone();d.add(Calendar.DAY_OF_YEAR,plus);
-    chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
-   }else if(numeric.find()){
-    int d=Integer.parseInt(numeric.group(1)),m=Integer.parseInt(numeric.group(2));
-    boolean exactYear=numeric.group(3)!=null||requestedYear!=null;
-    int y=numeric.group(3)!=null?Integer.parseInt(numeric.group(3)):requestedYear!=null?requestedYear:now.get(Calendar.YEAR);
-    chosen=exactDate(y,m,d,hour,minute);
-    if(!exactYear&&chosen!=null&&!chosen.after(now))chosen=exactDate(y+1,m,d,hour,minute);
-   }else if(named.find()){
-    int d=Integer.parseInt(named.group(1)),m=Arrays.asList(months).indexOf(named.group(2))+1;
-    boolean exactYear=named.group(3)!=null||requestedYear!=null;
-    int y=named.group(3)!=null?Integer.parseInt(named.group(3)):requestedYear!=null?requestedYear:now.get(Calendar.YEAR);
-    chosen=exactDate(y,m,d,hour,minute);
-    if(!exactYear&&chosen!=null&&!chosen.after(now))chosen=exactDate(y+1,m,d,hour,minute);
-   }else if(plain.find()){
-    int d=Integer.parseInt(plain.group(1));
-    if(requestedMonth>0){
-     // February 6 next year -> the named month and relative year take precedence.
-     int y=requestedYear!=null?requestedYear:now.get(Calendar.YEAR);
-     chosen=exactDate(y,requestedMonth,d,hour,minute);
-     if(requestedYear==null&&chosen!=null&&!chosen.after(now))chosen=exactDate(y+1,requestedMonth,d,hour,minute);
-    }else if(requestedYear==null){
-     chosen=dayNext(d,hour,minute);
-    }
-   }else {
-    String[] names={"luni","marti","miercuri","joi","vineri","sambata","duminica"};
-    int[] week={Calendar.MONDAY,Calendar.TUESDAY,Calendar.WEDNESDAY,Calendar.THURSDAY,Calendar.FRIDAY,Calendar.SATURDAY,Calendar.SUNDAY};
-    for(int i=0;i<names.length;i++)if(Pattern.compile("\\b"+names[i]+"\\b").matcher(s).find()){
-     Calendar d=(Calendar)now.clone();
-     int delta=(week[i]-d.get(Calendar.DAY_OF_WEEK)+7)%7;
-     d.add(Calendar.DAY_OF_YEAR,delta);
-     chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
-     if(chosen!=null&&!chosen.after(now)){
-      d.add(Calendar.DAY_OF_YEAR,7);
-      chosen=exactDate(d.get(Calendar.YEAR),d.get(Calendar.MONTH)+1,d.get(Calendar.DAY_OF_MONTH),hour,minute);
-     }
-     break;
-    }
-   }
-  }
-
-  String details=dictatedDetails(spoken);
-  if(details.matches("(?iu)^(respective|următoarele|urmatoarele|menționate|mentionate|de mai sus)$"))details="";
-  if(!details.isEmpty()){title.setText(shortTitle(details));description.setText(details);}
-  else{
-   String inferred=makeTitle(spoken);
-   if(title.getText().toString().trim().isEmpty())title.setText(inferred);
-   if(description.getText().toString().trim().isEmpty() && !"Notificare".equals(inferred))description.setText(inferred);
-  }
-  if(chosen!=null)at=chosen.getTimeInMillis();
+  at=p.at;
+  if(!p.details.isEmpty()){
+   title.setText(p.title);
+   description.setText(p.details);
+  }else if(title.getText().toString().trim().isEmpty())title.setText("Memento");
   refresh();
-  if(foundTime&&chosen!=null&&chosen.after(now)){save();return true;}
-  String missing=!foundTime?"ora":chosen==null?"data completă":"o dată viitoare";
-  if(voiceFeedback!=null)voiceFeedback.setText("Am auzit: "+spoken+"\nNu am înțeles "+missing+".");
-  return false;
+  if(voiceFeedback!=null)voiceFeedback.setText("✅ Am înțeles: "+date(at)+", "+time(at)+". Salvez automat.");
+  // Nu este necesar cuvântul «salvează» și nu există un al doilea buton obligatoriu.
+  return save();
  }
+
+}
 }
