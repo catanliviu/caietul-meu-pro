@@ -311,7 +311,7 @@ final class ReminderScreens {
   Matcher detail=Pattern.compile("(?iu)\\b(?:cu\\s+)?(?:detaliile|detalii|descrierea|descriere)\\s*[:,-]?\\s*(.+)$").matcher(spoken);
   if(!detail.find())return "";
   String value=detail.group(1).trim()
-   .replaceAll("(?iu)(?:\\s*[,;.]?\\s*(?:și|si)\\s*)?salveaz(?:ă|a)(?:-?o)?[\\s.!]*$","")
+   .replaceAll("(?iu)(?:\\s*[,;.]?\\s*(?:și|si)\\s*)?salveaz(?:ă|a)?(?:-?o)?[\\s.!]*$","")
    .replaceAll("^[\\s:,-]+|[\\s]+$","");
   return value;
  }
@@ -330,6 +330,7 @@ final class ReminderScreens {
   String months="ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie";
   s=s.replaceAll("\\b(?:anul\\s+(?:viitor|urmator|acesta|asta|curent)|la\\s+anul|(?:in\\s+)?anul\\s+\\d{4})\\b"," ");
   s=s.replaceAll("\\b(?:in\\s+)?luna\\s+(?:de\\s+)?(?:"+months+")\\b"," ");
+  s=s.replaceAll("\\b(?:in\\s+)?(?:anul\\s+)?(?:20|21)\\d{2}\\b"," ");
   s=s.replaceAll("\\b(?:la\\s+ora|ora|orele|la)\\s+\\d{1,2}(?:\\s*(?:[:.,]|si)\\s*\\d{1,2}|\\s+\\d{2})?\\b"," ");
   s=s.replaceAll("\\b\\d{1,2}[./-]\\d{1,2}(?:[./-]\\d{4})?\\b"," ");
   s=s.replaceAll("\\b(?:(?:in\\s+)?(?:data|ziua)\\s+(?:de\\s+)?|pe\\s+)\\d{1,2}\\b"," ");
@@ -337,7 +338,7 @@ final class ReminderScreens {
   s=s.replaceAll("\\b(?:"+months+")\\b"," ");
   s=s.replaceAll("\\b(?:astazi|azi|maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\\b"," ");
   s=s.replaceAll("\\b(?:si\\s+)?salveaz(?:a)?(?:-?o)?\\b"," ");
-  s=s.replaceAll("\\b(?:vreau|as|vrea|te|rog|sa|imi|mi|faci|fa|creezi|creeaza|creaza|pui|pune|adauga|o|un|notificare|memento|alarma|aminte(?:ste|sti)|aminteste|pentru|in|pe|la|data|de|ziua|ora|orele|care|cu|detaliile|detalii|2026|2027)\\b"," ");
+  s=s.replaceAll("\\b(?:vreau|as|vrea|te|rog|sa|imi|mi|faci|fa|creezi|creeaza|creaza|pui|pune|adauga|o|un|notificare|memento|alarma|aminte(?:ste|sti)|aminteste|pentru|in|pe|la|data|de|ziua|ora|orele|care|cu|detaliile|detalii|anul)\\b"," ");
   s=s.replaceAll("[^\\p{L}\\p{N}]+"," ").trim();
   if(s.isEmpty())return "Notificare";
   return shortTitle(s);
