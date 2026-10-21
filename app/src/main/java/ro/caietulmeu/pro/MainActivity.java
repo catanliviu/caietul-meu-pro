@@ -71,7 +71,7 @@ public class MainActivity extends Activity {
    preview.setGravity(Gravity.CENTER_VERTICAL);
    preview.setMinHeight(dp(56));
    preview.setPadding(dp(15),dp(8),dp(12),dp(8));
-   preview.setBackground(glassSurface(false,false,false));
+   preview.setBackground(glassSurface(false,true,false));
    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
    p.setMargins(dp(3),dp(4),dp(3),dp(4));chooser.addView(preview,p);
    preview.setOnClickListener(v->{
@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
    swatch.setGravity(Gravity.CENTER_VERTICAL);swatch.setMinHeight(dp(52));
    swatch.setPadding(dp(18),dp(8),dp(8),dp(8));
    swatch.setTextColor(dark?NOTE_DARK[i]:NOTE_LIGHT[i]);
-   swatch.setBackground(glassSurface(false,noteColorIndex()==i,false));
+   swatch.setBackground(glassSurface(false,true,false));
    chooser.addView(swatch,new LinearLayout.LayoutParams(-1,-2));
    swatch.setOnClickListener(v->{
     boolean ok=getPreferences(0).edit().putInt("global_note_color",index).commit();
@@ -147,9 +147,12 @@ public class MainActivity extends Activity {
  }
  Drawable glassSurface(boolean danger,boolean primary,boolean positive,boolean pressed){
   int radius=dp(primary?23:17);
-  if(primary){
-   int[] body=dark?new int[]{0xE8D9E7F5,0xD68FAED4,0xCF527AAE,0xE144608D,0xE7233E67}
-    :new int[]{0xF9FFFFFF,0xE5DEEBFF,0xD5A2C4ED,0xE87E9EC8,0xF34A689A};
+  { // Toate butoanele au acum volum convex de sticlă, nu doar cele principale.
+   int[] body=dark
+    ?(primary?new int[]{0xE8D9E7F5,0xD68FAED4,0xCF527AAE,0xE144608D,0xE7233E67}
+      :new int[]{0xF9F9F2E7,0xDBC8C3B6,0xD1A99E8D,0xE48C7B65,0xE45D554B})
+    :(primary?new int[]{0xF9FFFFFF,0xE5DEEBFF,0xD5A2C4ED,0xE87E9EC8,0xF34A689A}
+      :new int[]{0xFCFFFFFF,0xF3FFF9E9,0xDDFAE8C8,0xEED8BC8C,0xF2A58E69});
    if(danger)body=dark?new int[]{0xEFFFD9E1,0xEFAF7C8D,0xE67F415A,0xE54A263E,0xE2372335}
     :new int[]{0xFAFFFFFF,0xEAFDE1E7,0xF0DDA1B1,0xE8C97086,0xE99F455C};
    if(positive)body=dark?new int[]{0xF7F1FFED,0xE5A7DAC2,0xD55A9A85,0xDD31725B,0xF01D4E43}
@@ -201,11 +204,11 @@ public class MainActivity extends Activity {
   v.setTextColor(ink);v.setGravity(Gravity.CENTER);
   v.setTypeface(Typeface.DEFAULT,(primary||danger)?Typeface.BOLD:Typeface.NORMAL);
   v.setPadding(dp(13),dp(13),dp(13),dp(13));v.setMinHeight(dp(52));
-  boolean raised=primary || danger || positive;
+  boolean raised=true;
   StateListDrawable states=new StateListDrawable();
   states.addState(new int[]{android.R.attr.state_pressed},
-   glassSurface(danger,raised,positive,true));
-  states.addState(new int[]{},glassSurface(danger,raised,positive,false));
+   glassSurface(danger,primary,positive,true));
+  states.addState(new int[]{},glassSurface(danger,primary,positive,false));
   v.setBackground(new RippleDrawable(
    ColorStateList.valueOf(dark?0x57FFFFFF:0x3FFFFFFF),states,null));
   if(raised){
