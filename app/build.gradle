@@ -3,6 +3,7 @@ android {
  namespace 'ro.caietulmeu.pro'
  compileSdk 35
  defaultConfig { applicationId 'ro.caietulmeu.pro'; minSdk 26; targetSdk 35; versionCode 3; versionName '2.1' }
+ signingConfigs { debug { v1SigningEnabled true; v2SigningEnabled true } }
  buildTypes { debug { applicationIdSuffix '.test'; versionNameSuffix '-TEST' } }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
