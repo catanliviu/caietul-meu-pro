@@ -360,18 +360,28 @@ public final class ReminderKit {
   * Citim stilul global folosit de MainActivity.getPreferences(0), care utilizează
   * numele local "MainActivity" ca fișier SharedPreferences.
   */
+ static android.content.SharedPreferences mainEditorPrefs(Context c){
+  // Activity.getPreferences(0) folosește Activity.getLocalClassName().
+  // În APK-urile TEST cu applicationIdSuffix acesta este numele complet al clasei,
+  // nu doar "MainActivity". Alegem exact aceeași denumire în ambele variante.
+  String className=MainActivity.class.getName();
+  String packageName=c.getPackageName();
+  String localName=className.startsWith(packageName+".")
+   ?className.substring(packageName.length()+1):className;
+  return c.getSharedPreferences(localName,Context.MODE_PRIVATE);
+ }
  static Typeface reminderTypeface(Context c){
-  android.content.SharedPreferences p=c.getSharedPreferences("MainActivity",0);
+  android.content.SharedPreferences p=mainEditorPrefs(c);
   int idx=Math.max(0,Math.min(MainActivity.FONT_FAMILIES.length-1,p.getInt("global_font_style",0)));
   return Typeface.create(MainActivity.FONT_FAMILIES[idx],MainActivity.FONT_STYLES[idx]);
  }
  static int reminderColor(Context c,boolean dark){
-  android.content.SharedPreferences p=c.getSharedPreferences("MainActivity",0);
+  android.content.SharedPreferences p=mainEditorPrefs(c);
   int idx=Math.max(0,Math.min(MainActivity.NOTE_LIGHT.length-1,p.getInt("global_note_color",0)));
   return dark?MainActivity.NOTE_DARK[idx]:MainActivity.NOTE_LIGHT[idx];
  }
  static float reminderFontSp(Context c){
-  return Math.max(12f,Math.min(40f,c.getSharedPreferences("MainActivity",0).getFloat("global_font_sp",19f)));
+  return Math.max(12f,Math.min(40f,mainEditorPrefs(c).getFloat("global_font_sp",19f)));
  }
  static int px(Context c,float dp){return (int)(dp*c.getResources().getDisplayMetrics().density+0.5f);}
  // Aceeași carcasă bombată cu reflexii ca butoanele din aplicație.
@@ -410,7 +420,7 @@ public final class ReminderKit {
    if(details==null)details="";
    boolean showText=o==null?getIntent().getBooleanExtra("showText",true):o.optBoolean("showText",true);
    boolean speakText=o==null?getIntent().getBooleanExtra("speakText",false):o.optBoolean("speakText",false);
-   boolean dark=getSharedPreferences("MainActivity",0).getBoolean("dark",false);
+   boolean dark=mainEditorPrefs(this).getBoolean("dark",false);
    LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
    root.setGravity(Gravity.CENTER_HORIZONTAL);
    root.setPadding(px(this,21),px(this,28),px(this,21),px(this,30));
