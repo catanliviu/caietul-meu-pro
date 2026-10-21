@@ -15,6 +15,22 @@ import java.util.*;
 public final class ReminderKit {
  private ReminderKit() {}
  static final String STORE="caiet_mementouri_v1";
+ static final String GLOBAL_PREFS="nu_uita_preferinte_globale";
+ static String globalSound(Context c,String fallback){
+  android.content.SharedPreferences prefs=c.getSharedPreferences(GLOBAL_PREFS,Context.MODE_PRIVATE);
+  return prefs.getString("global_sound_uri",fallback);
+ }
+ static String globalSoundName(Context c,String fallback){
+  android.content.SharedPreferences prefs=c.getSharedPreferences(GLOBAL_PREFS,Context.MODE_PRIVATE);
+  return prefs.getString("global_sound_name",fallback);
+ }
+ static boolean rememberGlobalSound(Context c,String soundUri,String soundName){
+  return c.getSharedPreferences(GLOBAL_PREFS,Context.MODE_PRIVATE).edit()
+   .putString("global_sound_uri",soundUri==null?"":soundUri)
+   .putString("global_sound_name",soundName==null?"Sunetul implicit al telefonului":soundName)
+   .commit();
+ }
+
  static final String KEY="items";
  static final String CHANNEL="memento_alarm_silent_v3";
  static final String ALARM="ro.caietulmeu.pro.MEMENTO_ALARM";
@@ -56,7 +72,7 @@ public final class ReminderKit {
   Intent intent=new Intent(c,SoundService.class).setAction("START")
    .putExtra("id",sampleId)
    .putExtra("title","Probă alarmă — Nu Uita")
-   .putExtra("sound",sound==null?"":sound);
+   .putExtra("sound",globalSound(c,sound==null?"":sound));
   try{
    if(Build.VERSION.SDK_INT>=26)c.startForegroundService(intent);
    else c.startService(intent);
@@ -174,7 +190,7 @@ public final class ReminderKit {
    if(newTime>0){try{o.put("at",newTime);save(c,o);schedule(c,o);}catch(Exception ignored){}}
    Intent s=new Intent(c,SoundService.class).setAction("START");
    s.putExtra("id",id);s.putExtra("title",o.optString("title","Memento"));
-   s.putExtra("sound",o.optString("sound",""));
+   s.putExtra("sound",globalSound(c,o.optString("sound","")));
    try{if(Build.VERSION.SDK_INT>=26)c.startForegroundService(s);else c.startService(s);}
    catch(Exception e){android.util.Log.e("Memento","Alarm service failed",e);}
   }
@@ -205,7 +221,7 @@ public final class ReminderKit {
    id=i.getIntExtra("id",0);
    if(recentlyDismissed(this,id)){stopAudio();stopSelf();return START_NOT_STICKY;}
    String title=i.getStringExtra("title");if(title==null||title.isEmpty())title="Memento";
-   String sound=i.getStringExtra("sound");
+   String sound=globalSound(this,i.getStringExtra("sound"));
    ReminderScreens.stopSharedPreview();
    NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
    NotificationChannel channel=new NotificationChannel(CHANNEL,"Alarme Memento",NotificationManager.IMPORTANCE_HIGH);
