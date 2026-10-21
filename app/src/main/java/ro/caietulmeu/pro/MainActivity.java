@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
  void selectFontStyle(){
   LinearLayout chooser=new LinearLayout(this);chooser.setOrientation(LinearLayout.VERTICAL);
   chooser.setPadding(dp(12),dp(7),dp(12),dp(7));
+  chooser.setBackground(new ParchmentDrawable(dark));
   android.widget.ScrollView scroll=new android.widget.ScrollView(this);scroll.addView(chooser);
   AlertDialog dialog=new AlertDialog.Builder(this)
    .setTitle("✒ Alege stilul de scris")
@@ -98,7 +99,7 @@ public class MainActivity extends Activity {
  }
  void selectNoteColor(){
   LinearLayout chooser=new LinearLayout(this);chooser.setOrientation(LinearLayout.VERTICAL);
-  chooser.setPadding(dp(16),dp(8),dp(16),dp(8));chooser.setBackgroundColor(panel());
+  chooser.setPadding(dp(16),dp(8),dp(16),dp(8));chooser.setBackground(new ParchmentDrawable(dark));
   AlertDialog dialog=new AlertDialog.Builder(this).setTitle("🎨 Culoarea permanentă a textului")
    .setView(chooser).setNegativeButton("Anulează",null).create();
   for(int i=0;i<NOTE_COLORS.length;i++){
