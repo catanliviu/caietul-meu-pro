@@ -407,12 +407,13 @@ final class ReminderScreens {
     +name+" — "+date(at)+", "+time(at);
    if(stayOnForm){
     if(voiceFeedback!=null)voiceFeedback.setText(lastSavedLabel+
-     "\nPoți bifa acum «Citește mesajul vocal»: se salvează imediat pentru acest memento."+
-     "\n🗣️ Text pentru citire: "+
-     (RomanianReminderParser.speechText(name,description.getText().toString()).isEmpty()?
-       "(LIPSEȘTE — adaugă text în titlu sau detalii și salvează din nou)":
-       RomanianReminderParser.speechText(name,description.getText().toString())));
-    Toast.makeText(a,"Memento salvat. Poți schimba acum bifele scris/vocal.",Toast.LENGTH_LONG).show();
+     (voiceReminderMode?"\n✅ Activat automat: mesaj SCRIS + citit cu VOCE. Nu trebuie să tastezi sau să bifezi.":
+      "\nPoți schimba modul de afișare sau citire de mai sus.")+
+     "\n🗣️ Mesajul tău: "+
+     RomanianReminderParser.speechText(name,description.getText().toString()));
+    Toast.makeText(a,voiceReminderMode?
+      "✅ Memento vocal salvat: îl vei vedea și îl vei auzi!":
+      "✅ Memento salvat",Toast.LENGTH_LONG).show();
    }else{
     list();
     Toast.makeText(a,lastSavedLabel,Toast.LENGTH_LONG).show();
@@ -445,7 +446,7 @@ final class ReminderScreens {
   awaitingSpokenMessage=true;voiceReminderMode=true;
   if(voiceFeedback!=null)voiceFeedback.setText(
    "📅 Am înțeles: "+date(at)+", "+time(at)+
-   "\\n🎙️ Spune acum CE trebuie să îți amintesc. Nu e nevoie să tastezi nimic.");
+   "\n🎙️ Spune acum CE trebuie să îți amintesc. Nu e nevoie să tastezi nimic.");
   if(commandField!=null)commandField.setText("");
   closeVoiceQuestion();
   try{
