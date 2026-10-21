@@ -9,6 +9,9 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
+import android.animation.ObjectAnimator;
+import android.animation.StateListAnimator;
 import android.graphics.Typeface;
 import android.speech.RecognizerIntent;
 import android.text.*;
@@ -33,17 +36,65 @@ public class MainActivity extends Activity {
  String before="";
  Stack<String> undo=new Stack<>(),redo=new Stack<>();
  int bg(){return dark?0xff151b29:0xfff2f5ff;}
- int fg(){return dark?Color.WHITE:0xff182238;}
- int panel(){return dark?0xff283247:Color.WHITE;}
+ int fg(){return dark?0xffF8E4C4:0xff493522;}
+ int panel(){return dark?0xC04A382D:0xC6FFF6E3;}
  int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
  static final String[] NOTE_COLORS={"Negru / natural","Albastru","Verde","Vișiniu","Mov"};
- static final int[] NOTE_LIGHT={0xff182238,0xff174D9A,0xff14653B,0xff912B49,0xff623B97};
- static final int[] NOTE_DARK={0xffF4F6FF,0xffA2C8FF,0xffA1E0BB,0xffFFADC2,0xffCEB3FF};
+ static final int[] NOTE_LIGHT={0xff493522,0xff174D9A,0xff14653B,0xff912B49,0xff623B97};
+ static final int[] NOTE_DARK={0xffF8E4C4,0xffA2C8FF,0xffA1E0BB,0xffFFADC2,0xffCEB3FF};
+ static final String[] FONT_NAMES={"Clasic","Îngroșat","Elegant","Artistic","Scris de mână","Modern","Tip carte"};
+ static final String[] FONT_FAMILIES={"sans-serif","sans-serif","serif","serif","casual","sans-serif-light","serif"};
+ static final int[] FONT_STYLES={Typeface.NORMAL,Typeface.BOLD,Typeface.ITALIC,
+  Typeface.BOLD_ITALIC,Typeface.NORMAL,Typeface.NORMAL,Typeface.NORMAL};
+ int fontStyleIndex(){
+  return Math.max(0,Math.min(FONT_NAMES.length-1,getPreferences(0).getInt("global_font_style",0)));
+ }
+ Typeface preferredTypeface(int index){
+  return Typeface.create(FONT_FAMILIES[index],FONT_STYLES[index]);
+ }
+ Typeface preferredTypeface(){return preferredTypeface(fontStyleIndex());}
+ void selectFontStyle(){
+  LinearLayout chooser=new LinearLayout(this);chooser.setOrientation(LinearLayout.VERTICAL);
+  chooser.setPadding(dp(12),dp(7),dp(12),dp(7));
+  android.widget.ScrollView scroll=new android.widget.ScrollView(this);scroll.addView(chooser);
+  AlertDialog dialog=new AlertDialog.Builder(this)
+   .setTitle("✒ Alege stilul de scris")
+   .setView(scroll).setNegativeButton("Renunță",null).create();
+  for(int i=0;i<FONT_NAMES.length;i++){
+   final int index=i;
+   TextView preview=new TextView(this);
+   preview.setText((fontStyleIndex()==i?"✓  ":"")+FONT_NAMES[i]+"   •   Jurnalul meu");
+   preview.setTypeface(preferredTypeface(i));
+   preview.setTextSize(20);
+   preview.setTextColor(noteColor());
+   preview.setGravity(Gravity.CENTER_VERTICAL);
+   preview.setMinHeight(dp(56));
+   preview.setPadding(dp(15),dp(8),dp(12),dp(8));
+   preview.setBackground(glassSurface(false,false,false));
+   LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+   p.setMargins(dp(3),dp(4),dp(3),dp(4));chooser.addView(preview,p);
+   preview.setOnClickListener(v->{
+    boolean saved=getPreferences(0).edit().putInt("global_font_style",index).commit();
+    if(saved){
+     applyNoteAppearance();
+     Toast.makeText(this,"✓ Stilul «"+FONT_NAMES[index]+"» rămâne memorat",Toast.LENGTH_LONG).show();
+    }else Toast.makeText(this,"Nu am putut salva stilul",Toast.LENGTH_LONG).show();
+    dialog.dismiss();
+   });
+  }
+  dialog.show();
+ }
  int noteColorIndex(){return Math.max(0,Math.min(NOTE_COLORS.length-1,getPreferences(0).getInt("global_note_color",0)));}
  int noteColor(){int i=noteColorIndex();return dark?NOTE_DARK[i]:NOTE_LIGHT[i];}
  void applyNoteAppearance(){
-  if(body!=null){body.setTextColor(noteColor());body.setTextSize(fontSizeSp());}
-  if(title!=null){title.setTextColor(noteColor());title.setTextSize(fontSizeSp());}
+  if(body!=null){
+   body.setTextColor(noteColor());body.setTextSize(fontSizeSp());
+   body.setTypeface(preferredTypeface());
+  }
+  if(title!=null){
+   title.setTextColor(noteColor());title.setTextSize(fontSizeSp());
+   title.setTypeface(preferredTypeface());
+  }
  }
  void selectNoteColor(){
   LinearLayout chooser=new LinearLayout(this);chooser.setOrientation(LinearLayout.VERTICAL);
@@ -89,33 +140,49 @@ public class MainActivity extends Activity {
   Toast.makeText(this,(saved?"✓ Font permanent: ":"Eroare la salvarea fontului: ")+(int)newSize+" sp",Toast.LENGTH_SHORT).show();
  }
  @Override public void onCreate(Bundle b){super.onCreate(b);dark=getPreferences(0).getBoolean("dark",false);try{notes=new JSONArray(getPreferences(0).getString("notes","[]"));}catch(Exception e){}home();}
- // Glass 2D: translucid, contur luminat, reflexie delicată; fără relief/umbre.
+ // Sticlă 3D bombată la acțiunile importante; restul rămâne discret.
  Drawable glassSurface(boolean danger,boolean primary,boolean positive){
-  int[] gradient;
-  int stroke;
-  if(dark){
-   gradient=danger?new int[]{0xB66D3D59,0x99502B44}
-    :primary?new int[]{0xBF5073B1,0xA52D4E81}
-    :positive?new int[]{0xAD2A746B,0x99305559}
-    :new int[]{0xA24A5F7E,0x88374765};
-   stroke=danger?0xC8EDA8C0:primary?0xC8B1D5FF:positive?0xB6A2E4D5:0x9BBACCEB;
-  }else{
-   gradient=danger?new int[]{0xD9FFF2F5,0xBDEED7E3}
-    :primary?new int[]{0xD9D0E5FF,0xA6ACCFFC}
-    :positive?new int[]{0xD9E1FFF3,0xACE0F3E9}
-    :new int[]{0xE4FFFFFF,0xC6E8F0FF};
-   stroke=danger?0xC4D8889D:primary?0xBA6A95D8:positive?0xB36DAE94:0xADD0DAF0;
+  return glassSurface(danger,primary,positive,false);
+ }
+ Drawable glassSurface(boolean danger,boolean primary,boolean positive,boolean pressed){
+  int radius=dp(primary?23:17);
+  if(primary){
+   int[] body=dark?new int[]{0xE8D9E7F5,0xD68FAED4,0xCF527AAE,0xE144608D,0xE7233E67}
+    :new int[]{0xF9FFFFFF,0xE5DEEBFF,0xD5A2C4ED,0xE87E9EC8,0xF34A689A};
+   if(danger)body=dark?new int[]{0xEFFFD9E1,0xEFAF7C8D,0xE67F415A,0xE54A263E,0xE2372335}
+    :new int[]{0xFAFFFFFF,0xEAFDE1E7,0xF0DDA1B1,0xE8C97086,0xE99F455C};
+   if(positive)body=dark?new int[]{0xF7F1FFED,0xE5A7DAC2,0xD55A9A85,0xDD31725B,0xF01D4E43}
+    :new int[]{0xFAFFFFFF,0xF3E4FFEF,0xE0A8D9C3,0xED67A48D,0xEE377A63};
+   GradientDrawable under=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+    dark?new int[]{0x57241B15,0x8E10100F}:new int[]{0x50643A27,0xAA5A392C});
+   under.setCornerRadius(radius);
+   GradientDrawable convex=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,body);
+   convex.setCornerRadius(radius);convex.setStroke(dp(2),
+    dark?0xF9E1ECFF:0xFFEFF8FF);
+   GradientDrawable specular=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+    new int[]{0xBFFFFFFF,0x84FFFFFF,0x21FFFFFF,0x00FFFFFF});
+   specular.setCornerRadius(dp(22));
+   GradientDrawable lowerGlint=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
+    new int[]{0x87FFFFFF,0x25FFFFFF,0x00FFFFFF});
+   lowerGlint.setCornerRadius(radius);
+   GradientDrawable edge=new GradientDrawable();
+   edge.setColor(Color.TRANSPARENT);edge.setCornerRadius(radius);
+   edge.setStroke(dp(1),dark?0xB9D2EEFF:0xCBA7D4FF);
+   LayerDrawable glass=new LayerDrawable(new Drawable[]{under,convex,specular,lowerGlint,edge});
+   glass.setLayerInset(1,dp(1),dp(1),dp(1),pressed?dp(1):dp(4));
+   glass.setLayerInset(2,dp(9),dp(4),dp(9),pressed?dp(9):dp(13));
+   glass.setLayerInset(3,dp(5),dp(1),dp(5),pressed?dp(3):dp(6));
+   glass.setLayerInset(4,dp(1),dp(1),dp(1),pressed?dp(1):dp(4));
+   return glass;
   }
-  GradientDrawable glass=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,gradient);
-  glass.setCornerRadius(dp(18));
-  GradientDrawable reflection=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-   dark?new int[]{0x38FFFFFF,0x10FFFFFF,0x00FFFFFF}:
-    new int[]{0x7AFFFFFF,0x26FFFFFF,0x00FFFFFF});
-  reflection.setCornerRadius(dp(18));
-  GradientDrawable outline=new GradientDrawable();
-  outline.setColor(Color.TRANSPARENT);
-  outline.setCornerRadius(dp(18));outline.setStroke(dp(1),stroke);
-  return new LayerDrawable(new Drawable[]{glass,reflection,outline});
+  int[] colors=dark?(danger?new int[]{0xAF76484A,0x93402D2D}:positive?
+   new int[]{0xB34E6F61,0x93405243}:new int[]{0xAA6E5B49,0x94504438})
+   :(danger?new int[]{0xEFFFF6F5,0xC8F2D7D4}:positive?
+   new int[]{0xF1F4FFEF,0xC7D4E9CF}:new int[]{0xF9FFFDF6,0xC9F6E7CE});
+  GradientDrawable surface=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,colors);
+  surface.setCornerRadius(radius);
+  surface.setStroke(dp(1),dark?0xB1C7B5A0:0xC2C2A783);
+  return surface;
  }
  TextView button(String text,LinearLayout parent,Runnable run){
   String lower=text.toLowerCase(new Locale("ro","RO"));
@@ -133,10 +200,22 @@ public class MainActivity extends Activity {
   v.setTextColor(ink);v.setGravity(Gravity.CENTER);
   v.setTypeface(Typeface.DEFAULT,(primary||danger)?Typeface.BOLD:Typeface.NORMAL);
   v.setPadding(dp(13),dp(13),dp(13),dp(13));v.setMinHeight(dp(52));
+  boolean raised=primary || danger || positive;
+  StateListDrawable states=new StateListDrawable();
+  states.addState(new int[]{android.R.attr.state_pressed},
+   glassSurface(danger,raised,positive,true));
+  states.addState(new int[]{},glassSurface(danger,raised,positive,false));
   v.setBackground(new RippleDrawable(
-   ColorStateList.valueOf(dark?0x43FFFFFF:0x284F7BCD),glassSurface(danger,primary,positive),null));
-  // Sticlă plată: fără elevation sau umbră 3D.
-  v.setElevation(0f);v.setStateListAnimator(null);
+   ColorStateList.valueOf(dark?0x57FFFFFF:0x3FFFFFFF),states,null));
+  if(raised){
+   v.setElevation(dp(5));
+   StateListAnimator pressAnimation=new StateListAnimator();
+   pressAnimation.addState(new int[]{android.R.attr.state_pressed},
+    ObjectAnimator.ofFloat(v,"translationZ",0f).setDuration(85));
+   pressAnimation.addState(new int[]{},
+    ObjectAnimator.ofFloat(v,"translationZ",dp(3)).setDuration(140));
+   v.setStateListAnimator(pressAnimation);
+  }else{v.setElevation(0f);v.setStateListAnimator(null);}
   v.setClickable(true);v.setFocusable(true);v.setContentDescription(text);
   LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(parent.getOrientation()==LinearLayout.VERTICAL?-1:-2,-2);
   p.setMargins(dp(4),dp(5),dp(4),dp(5));parent.addView(v,p);
@@ -145,18 +224,16 @@ public class MainActivity extends Activity {
  }
  LinearLayout vertical(){
   LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(12),dp(15),dp(12),dp(10));
-  GradientDrawable background=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-   dark?new int[]{0xff111A2E,0xff1D2B47,0xff241F3B}:new int[]{0xffECF5FF,0xffF3F0FF,0xffEAF8F5});
-  l.setBackground(background);setContentView(l);return l;
+  l.setBackground(new ParchmentDrawable(dark));setContentView(l);return l;
  }
  LinearLayout line(LinearLayout parent){LinearLayout l=new LinearLayout(this);l.setOrientation(0);HorizontalScrollView sc=new HorizontalScrollView(this);sc.addView(l);parent.addView(sc);return l;}
  EditText field(String hint,boolean multiline){
   EditText e=new EditText(this);e.setHint(hint);e.setTextColor(fg());e.setHintTextColor(0xff888899);e.setTextSize(19);e.setPadding(15,14,15,14);e.setBackgroundColor(panel());
   if(multiline){e.setGravity(48);e.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES|android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);}else e.setSingleLine(true);
   GradientDrawable inputGlass=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-   dark?new int[]{0xAE36435D,0x96253047}:new int[]{0xF4FFFFFF,0xCCEAF0FC});
+   dark?new int[]{0xD0504137,0xC0382C25}:new int[]{0xF9FFF9EB,0xEAF9E6C9});
   inputGlass.setCornerRadius(dp(15));
-  inputGlass.setStroke(dp(1),dark?0x9DA5B9E2:0xB3BCCFF0);
+  inputGlass.setStroke(dp(1),dark?0xA5B39C7F:0xB3B89A69);
   e.setBackground(inputGlass);
   e.setPrivateImeOptions("nm");
   return e;
@@ -167,9 +244,10 @@ public class MainActivity extends Activity {
   if(reminders!=null)reminders.stopPreview();root=vertical();
   TextView brand=new TextView(this);brand.setText("🧠 Nu Uita");
   brand.setTextSize(28);brand.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-  brand.setTextColor(fg());brand.setPadding(dp(10),dp(5),dp(8),dp(0));root.addView(brand);
+  brand.setTextColor(fg());brand.setTypeface(Typeface.create("serif",Typeface.BOLD_ITALIC));
+  brand.setPadding(dp(10),dp(5),dp(8),dp(0));root.addView(brand);
   TextView subtitle=new TextView(this);subtitle.setText("Notițe, calendar și mementouri într-un singur loc");
-  subtitle.setTextSize(13);subtitle.setTextColor(dark?0xffADBBD3:0xff5A6980);
+  subtitle.setTextSize(13);subtitle.setTextColor(dark?0xffDECEB1:0xff6F573B);
   subtitle.setPadding(dp(11),0,dp(9),dp(6));root.addView(subtitle);
   LinearLayout first=new LinearLayout(this);first.setOrientation(LinearLayout.HORIZONTAL);root.addView(first);
   tile("➕ Notiță nouă",first,()->editor(-1));
@@ -193,7 +271,8 @@ public class MainActivity extends Activity {
     if(!(t+" "+b).toLowerCase(Locale.ROOT).contains(q))continue;
     final int index=i;
     TextView noteRow=button("📝 "+t+"\n"+b.substring(0,Math.min(75,b.length())),list,()->editor(index));
-    noteRow.setTextSize(fontSizeSp());noteRow.setTextColor(noteColor());noteRow.setGravity(Gravity.CENTER_VERTICAL);
+    noteRow.setTextSize(fontSizeSp());noteRow.setTextColor(noteColor());
+    noteRow.setTypeface(preferredTypeface());noteRow.setGravity(Gravity.CENTER_VERTICAL);
    }
   };
   search.addTextChangedListener(new TextWatcher(){
@@ -226,7 +305,9 @@ public class MainActivity extends Activity {
   LinearLayout fontTools=new LinearLayout(this);fontTools.setOrientation(LinearLayout.HORIZONTAL);root.addView(fontTools);
   tile("A+ Mărește",fontTools,()->changeFontSize(2));
   tile("A− Micșorează",fontTools,()->changeFontSize(-2));
-  tile("🎨 Culoare",fontTools,()->selectNoteColor());
+  LinearLayout styleTools=new LinearLayout(this);styleTools.setOrientation(LinearLayout.HORIZONTAL);root.addView(styleTools);
+  tile("✒ Stil de scris",styleTools,()->selectFontStyle());
+  tile("🎨 Culoare",styleTools,()->selectNoteColor());
   body=field("Scrie sau dictează aici…",true);
   applyNoteAppearance();
   root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
